@@ -78,8 +78,10 @@ def get_data(dataset_path, privacy_amplify_sampling_rate):
     train_adj_lists = [[] for _ in range(len(dense_adj_matrix))]
     for node_index in range(len(dense_adj_matrix)):
         train_adj_lists[node_index] = list(np.nonzero(dense_adj_matrix[node_index])[0])
+
+
     _, groups = metis.part_graph(train_adj_lists, 9, seed=0)
-    test_idx = np.where(np.asarray(groups) == 4)[0]
+    test_idx = np.where(np.asarray(groups) == 4)[0] 
     valid_idx = np.where(np.asarray(groups) == 5)[0]
     train_total_idx = np.setdiff1d(np.arange(n),  np.hstack([test_idx, valid_idx]))
     print(train_total_idx)

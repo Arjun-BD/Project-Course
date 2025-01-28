@@ -92,6 +92,10 @@ class DPGNN:
 
     def gen_feed(self, attr_matrix, ppr_matrix, labels):
         source_idx, neighbor_idx = ppr_matrix.nonzero()
+        
+        # Ensure source_idx and neighbor_idx are np.int32
+        source_idx = source_idx.astype(np.int32)
+        neighbor_idx = neighbor_idx.astype(np.int32)
 
         batch_attr = attr_matrix[neighbor_idx]
         feed = {
@@ -121,7 +125,6 @@ class DPGNN:
 
     def predict(self, sess, adj_matrix, attr_matrix, alpha,
                 nprop=2, ppr_normalization='sym', batch_size_logits=10000):
-
 
         local_logits = self._get_logits(sess, attr_matrix, adj_matrix.shape[0], batch_size_logits)
         logits = local_logits.copy()
@@ -162,7 +165,7 @@ def train(sess, model, attr_matrix, train_idx, topk_train, labels, epoch, batch_
         attr_matrix = SparseRowIndexer(attr_matrix)
 
     for i in range(0, len(train_idx), batch_size):
-        if (i + batch_size)<=len(labels):
+        if (i + batch_size) <= len(labels):
             feed_train = model.feed_for_batch_train(attr_matrix,
                                                     topk_train[train_idx[i:i + batch_size]],
                                                     labels[train_idx[i:i + batch_size]],
