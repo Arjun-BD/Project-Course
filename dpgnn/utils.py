@@ -8,6 +8,7 @@ from .privacy_utils.rdp_accountant import compute_rdp, get_privacy_spent
 from .sparsegraph import load_from_npz
 
 
+
 def sparse_feeder(M):
     # Convert a sparse matrix to the format suitable for feeding as a tf.SparseTensor
     M = M.tocoo()
