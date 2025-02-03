@@ -16,7 +16,7 @@ from tqdm import tqdm
 import pandas as pd
 from pynverse import inversefunc
 import pickle as pkl
-
+from scipy.sparse import csr_matrix
 
 # Set up logging
 
@@ -27,11 +27,11 @@ from model_cora import ReGMM_VGAE, clustering_metrics
 from datasets import format_data
 from preprocessing import load_data, sparse_to_tuple, preprocess_graph
 
-def predict_node_labels(model_path, dataset="Cora", data_path="./data/Cora", save_predictions=True):
+def predict_node_labels(model_path, dataset="Cora", data_path="./data/npz", save_predictions=True,clus = 7):
     # Network parameters
     num_neurons = 32
     embedding_size = 16
-    nClusters = 7  # Specific to Cora dataset
+    nClusters = clus  # Specific to Cora dataset
     
     # Load and preprocess data
     feas = format_data(dataset.lower(), data_path)
@@ -88,16 +88,56 @@ def predict_node_labels(model_path, dataset="Cora", data_path="./data/Cora", sav
         results_df.to_csv(output_path, index=False)
         print(f"Predictions saved to {output_path}")
     
-    return results_df, embeddings
+    return results_df, embeddings,true_labels
 
 MODEL_PATH = "./saved_models/ReGMM_VGAE_model.pth"
     
 # Get predictions for all nodes
-predictions_df, embeddings = predict_node_labels(
+predictions_df, embeddings,true_labels = predict_node_labels(
     model_path=MODEL_PATH,
     dataset="Cora",
     data_path="GAE/R-GMM-VGAE/data/Cora"
 )
+from sklearn.metrics import accuracy_score
+from scipy.optimize import linear_sum_assignment
+accuracy = accuracy_score(predictions_df["True_Label"], predictions_df["Predicted_Cluster"])
+
+print("Accuracy:", accuracy)
+# def calculate_accuracy(predictions_df):
+#     # Extract true labels and predicted clusters
+#     true_labels = predictions_df["True_Label"]
+#     predicted_clusters = predictions_df["Predicted_Cluster"]
+
+#     # Get unique true labels and predicted clusters
+#     unique_true_labels = np.unique(true_labels)
+#     unique_predicted_clusters = np.unique(predicted_clusters)
+
+#     # Create cost matrix
+#     cost_matrix = np.zeros((len(unique_true_labels), len(unique_predicted_clusters)))
+#     for i, true_label in enumerate(unique_true_labels):
+#         for j, cluster in enumerate(unique_predicted_clusters):
+#             # Negative count for correct matches
+#             cost_matrix[i, j] = -np.sum((true_labels == true_label) & (predicted_clusters == cluster))
+
+#     # Solve the assignment problem
+#     row_ind, col_ind = linear_sum_assignment(cost_matrix)
+
+#     # Map clusters to true labels
+#     cluster_to_label_mapping = {unique_predicted_clusters[col]: unique_true_labels[row]
+#                                  for row, col in zip(row_ind, col_ind)}
+
+#     # Map predicted clusters to corresponding true labels
+#     mapped_predictions = predicted_clusters.map(cluster_to_label_mapping)
+
+#     # Calculate accuracy
+#     accuracy = accuracy_score(true_labels, mapped_predictions)
+#     return accuracy, cluster_to_label_mapping
+
+# # Calculate accuracy and mapping
+# accuracy, cluster_mapping = calculate_accuracy(predictions_df)
+
+# print("Accuracy:", accuracy)
+# print("Cluster-to-Label Mapping:", cluster_mapping)
 
 # Print first few predictions
 print("\nFirst 10 node predictions:")
@@ -176,6 +216,46 @@ def main(unused_argv):
     train_labels, train_adj_matrix, train_attr_matrix, train_index, test_labels, test_adj_matrix, \
     test_attr_matrix, test_index, num_nodes, num_class, num_attr, num_edges = utils.get_data(FLAGS.data_file,
                                                      privacy_amplify_sampling_rate=FLAGS.privacy_amplify_sampling_rate)
+    def compute_feature_centers(labels, features, indices):
+        """
+        Compute feature centers for nodes with the same label.
+
+        Args:
+            labels (ndarray): Array of labels for all nodes.
+            features (csr_matrix): Sparse matrix of features (shape: num_nodes x num_features).
+            indices (ndarray): Indices of nodes to consider.
+
+        Returns:
+            csr_matrix: A sparse matrix where each row is the center for a label.
+        """
+        # Ensure inputs are NumPy arrays
+        labels = np.array(labels)
+        indices = np.array(indices)
+        
+        # Extract the labels and features for the specified indices
+        node_labels = labels[indices]
+        node_features = features[indices]
+        
+        # Find unique labels
+        unique_labels = np.unique(node_labels)
+        
+        # Compute centers
+        centers = []
+        for label in unique_labels:
+            # Get rows corresponding to the current label
+            rows = node_features[node_labels == label]
+            # Compute the mean (center) for this label
+            center = rows.mean(axis=0)
+            centers.append(center)
+        
+        # Stack centers into a matrix
+        return csr_matrix(np.vstack(centers))
+    
+
+    centers = compute_feature_centers(train_labels, train_attr_matrix, train_index)
+    
+    print(centers.toarray())  # Convert sparse matrix to dense for display
+
 
     d = num_attr
     nc = num_class
@@ -250,26 +330,75 @@ def main(unused_argv):
 
 
     ''' Preprocessing: Calculate PPR scores '''
-    start = time.time()
-    topk_train = ppr.topk_ppr_matrix_ista(train_adj_matrix, FLAGS.alpha, FLAGS.eps, FLAGS.rho, train_index[:ppr_num],
-                                            FLAGS.topk, FLAGS.sigma_ista, FLAGS.clip_bound_ista, FLAGS.dp_ppr,
-                                            FLAGS.em_sensitivity, FLAGS.report_val_eps, FLAGS.EM, FLAGS.EM_eps)
-    if ppr_num < len(train_index):
-        topk_train_I = np.identity(len(train_index))
-        topk_train_I = topk_train_I[ppr_num:]
-        topk_train_dense = topk_train.toarray()
-        topk_train_dense_full = np.concatenate((topk_train_dense, topk_train_I), axis=0)
-        topk_train = sp.csr_matrix(topk_train_dense_full)
+    # start = time.time()
+    # topk_train = ppr.topk_ppr_matrix_ista(train_adj_matrix, FLAGS.alpha, FLAGS.eps, FLAGS.rho, train_index[:ppr_num],
+    #                                         FLAGS.topk, FLAGS.sigma_ista, FLAGS.clip_bound_ista, FLAGS.dp_ppr,
+    #                                         FLAGS.em_sensitivity, FLAGS.report_val_eps, FLAGS.EM, FLAGS.EM_eps)
+    # print(topk_train.nnz,len(topk_train.toarray()))
+    # if ppr_num < len(train_index):
+    #     topk_train_I = np.identity(len(train_index))
+    #     topk_train_I = topk_train_I[ppr_num:]
+    #     topk_train_dense = topk_train.toarray()
+    #     topk_train_dense_full = np.concatenate((topk_train_dense, topk_train_I), axis=0)
+    #     topk_train = sp.csr_matrix(topk_train_dense_full)
 
-    time_preprocessing = time.time() - start
-    print(f"Calculate Train PPR Matrix Runtime: {time_preprocessing:.2f}s")
+    # time_preprocessing = time.time() - start
+    # print(f"Calculate Train PPR Matrix Runtime: {time_preprocessing:.2f}s")
+
+    my_topk  = [[0.0 for i in range(len(train_adj_matrix.toarray()))] for i in range(len(train_adj_matrix.toarray()))]
+    
+    def clus(centers, vec, k= 2, mode = 'nearest'):
+        
+        if mode not in {'nearest', 'farthest', 'random'}:
+            raise ValueError("Mode must be 'nearest', 'farthest', or 'random'.")
+        
+        # Normalize centers and vec for cosine similarity
+        norm_centers = centers / np.linalg.norm(centers, axis=1, keepdims=True)
+       
+        norm_vec = vec / np.linalg.norm(vec)
+        
+        # Calculate cosine similarity
+        similarities = norm_centers @ norm_vec
+
+        if mode == 'nearest':
+            # Get indices of k highest similarities
+            indices = np.argsort(-similarities)[:k]
+        elif mode == 'farthest':
+            # Get indices of k lowest similarities
+            indices = np.argsort(similarities)[:k]
+        elif mode == 'random':
+            # Select k random indices
+            indices = np.random.choice(len(centers), size=k, replace=False)
+        
+        return indices.tolist()
+    
+    def count_elements(arr: np.ndarray) -> dict:
+        unique_elements, counts = np.unique(arr, return_counts=True)
+        return dict(zip(unique_elements, counts))
+    
+    element_counts = count_elements(train_labels)
+
+    for i in range(len(train_adj_matrix.toarray())):
+        cen = clus(centers.toarray(),train_attr_matrix.toarray()[i])
+        for j in range(len(train_labels)):
+            if(train_labels[j] in cen):
+                my_topk[i][j] = 1/element_counts[train_labels[j]]
+            
+    my_topk = sp.csr_matrix(my_topk)
 
     # normalize l1 norm of each column of topk_train'''
-    topk_train_dense = topk_train.toarray()
-    for col in range(len(topk_train_dense[0, :])):
-        if np.linalg.norm(topk_train_dense[:, col], ord=1) != 0:
-            topk_train_dense[:, col] *= (1.0 / np.linalg.norm(topk_train_dense[:, col], ord=1))
-    topk_train = sp.csr_matrix(topk_train_dense)
+    my_topk_dense = my_topk.toarray()
+    for col in range(len(my_topk_dense[0, :])):
+        if np.linalg.norm(my_topk_dense[:, col], ord=1) != 0:
+            my_topk_dense[:, col] *= (1.0 / np.linalg.norm(my_topk_dense[:, col], ord=1))
+    my_topk = sp.csr_matrix(my_topk_dense)
+
+    # normalize l1 norm of each column of topk_train'''
+    # topk_train_dense = topk_train.toarray()
+    # for col in range(len(topk_train_dense[0, :])):
+    #     if np.linalg.norm(topk_train_dense[:, col], ord=1) != 0:
+    #         topk_train_dense[:, col] *= (1.0 / np.linalg.norm(topk_train_dense[:, col], ord=1))
+    # topk_train = sp.csr_matrix(topk_train_dense)
 
 
     ''' Training: Set up model and train '''
@@ -299,7 +428,7 @@ def main(unused_argv):
 
                 train_encoder(
                     sess=sess, model=model, attr_matrix=train_attr_matrix,
-                    train_idx=train_index, topk_train=topk_train, labels=train_labels,
+                    train_idx=train_index, topk_train=my_topk, labels=train_labels,
                     epoch=epoch, batch_size=FLAGS.batch_size)
 
 
@@ -309,7 +438,7 @@ def main(unused_argv):
 
             train(
                 sess=sess, model=model, attr_matrix=train_attr_matrix,
-                train_idx=train_index, topk_train=topk_train, labels=train_labels,
+                train_idx=train_index, topk_train=my_topk, labels=train_labels,
                 epoch=epoch, batch_size=FLAGS.batch_size)
 
         print("Training finished.")
