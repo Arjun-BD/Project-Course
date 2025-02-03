@@ -13,10 +13,100 @@ from dpgnn import ppr_utils as ppr
 from dpgnn.model import DPGNN, train as train_solo
 from dpgnn.model_enc import DPGNN as DPGNN_enc, train as train_w_enc, train_encoder
 from tqdm import tqdm
+import pandas as pd
 from pynverse import inversefunc
+import pickle as pkl
 
 
 # Set up logging
+
+import torch
+import sys
+sys.path.append('./GAE/R-GMM-VGAE/')  # Add the path to the folder containing `model_cora.py`
+from model_cora import ReGMM_VGAE, clustering_metrics
+from datasets import format_data
+from preprocessing import load_data, sparse_to_tuple, preprocess_graph
+
+def predict_node_labels(model_path, dataset="Cora", data_path="./data/Cora", save_predictions=True):
+    # Network parameters
+    num_neurons = 32
+    embedding_size = 16
+    nClusters = 7  # Specific to Cora dataset
+    
+    # Load and preprocess data
+    feas = format_data(dataset.lower(), data_path)
+    num_features = feas['features'].size(1)
+    adj, features, true_labels = load_data(dataset.lower(), data_path)
+    
+    # Process adjacency matrix
+    adj = adj - sp.dia_matrix((adj.diagonal()[np.newaxis, :], [0]), shape=adj.shape)
+    adj.eliminate_zeros()
+    adj_norm = preprocess_graph(adj)
+    
+    # Convert features to sparse tensor format
+    features = sparse_to_tuple(features.tocoo())
+    features = torch.sparse.FloatTensor(
+        torch.LongTensor(features[0].T), 
+        torch.FloatTensor(features[1]), 
+        torch.Size(features[2])
+    )
+    
+    # Convert adjacency matrix to tensor
+    adj_norm = torch.sparse.FloatTensor(
+        torch.LongTensor(adj_norm[0].T), 
+        torch.FloatTensor(adj_norm[1]), 
+        torch.Size(adj_norm[2])
+    )
+    
+    # Initialize model
+    model = ReGMM_VGAE(
+        num_neurons=num_neurons,
+        num_features=num_features,
+        embedding_size=embedding_size,
+        nClusters=nClusters
+    )
+    
+    # Load saved model state
+    model.load_state_dict(torch.load(model_path))
+    # model.eval()
+    
+    # Get embeddings and predictions
+    with torch.no_grad():
+        _, _, embeddings = model.encode(features, adj_norm)
+        predictions = model.predict(embeddings)
+    
+    # Create results dataframe
+    results_df = pd.DataFrame({
+        'Node_ID': range(len(predictions)),
+        'Predicted_Cluster': predictions,
+        'True_Label': true_labels
+    })
+    
+    # Save predictions to CSV
+    if save_predictions:
+        output_path = f"node_predictions_{dataset.lower()}.csv"
+        results_df.to_csv(output_path, index=False)
+        print(f"Predictions saved to {output_path}")
+    
+    return results_df, embeddings
+
+MODEL_PATH = "./saved_models/ReGMM_VGAE_model.pth"
+    
+# Get predictions for all nodes
+predictions_df, embeddings = predict_node_labels(
+    model_path=MODEL_PATH,
+    dataset="Cora",
+    data_path="GAE/R-GMM-VGAE/data/Cora"
+)
+
+# Print first few predictions
+print("\nFirst 10 node predictions:")
+print(predictions_df.head(10))
+
+# Print cluster distribution
+print("\nCluster distribution:")
+print(predictions_df['Predicted_Cluster'].value_counts().sort_index())
+
 logger = logging.getLogger()
 logger.handlers = []
 ch = logging.StreamHandler()

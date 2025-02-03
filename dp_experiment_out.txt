@@ -659,3 +659,29 @@ dataset: data/pubmed, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD eps
 dataset: data/pubmed, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: Test acc: 0.1823
 dataset: data/pubmed, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: Test acc: 0.1712
 dataset: data/pubmed, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: Test acc: 0.1712
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7802
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.6471
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7864
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.6873
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7337
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7554
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.6997
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.6687
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7121
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7183
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.6316
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.6563
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7059
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.6192
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7183
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7585
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7430
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7276
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.6378
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7276
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7430
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.6842
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.6749
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7337
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7647
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 4, Test acc: 0.7090

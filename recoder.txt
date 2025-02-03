@@ -1,0 +1,3 @@
+ACC=0.755170, f1_macro=0.734737, precision_macro=0.756095, recall_macro=0.748696, f1_micro=0.755170, precision_micro=0.755170, recall_micro=0.755170, NMI=0.562794, ADJ_RAND_SCORE=0.559704
+ACC=0.754431, f1_macro=0.734241, precision_macro=0.755229, recall_macro=0.747760, f1_micro=0.754431, precision_micro=0.754431, recall_micro=0.754431, NMI=0.560248, ADJ_RAND_SCORE=0.556379
+ACC=0.752954, f1_macro=0.732535, precision_macro=0.753150, recall_macro=0.745879, f1_micro=0.752954, precision_micro=0.752954, recall_micro=0.752954, NMI=0.560049, ADJ_RAND_SCORE=0.554750

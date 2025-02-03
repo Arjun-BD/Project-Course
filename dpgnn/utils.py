@@ -65,6 +65,8 @@ def get_data(dataset_path, privacy_amplify_sampling_rate):
 
     # number of nodes and attributes
     n, d = g.attr_matrix.shape
+    # print(dir(g))
+    # print(vars(g))
     class_number = len(np.unique(g.labels))
     print("Loading {} graph with #nodes={}, #attributes={}, #classes={}".format(dataset_path.split('/')[-1], n, d,
                                                                                 class_number))
@@ -113,7 +115,7 @@ def get_data(dataset_path, privacy_amplify_sampling_rate):
     if sp.issparse(test_attr_matrix):
         test_attr_matrix = SparseRowIndexer(test_attr_matrix)
     test_index = np.arange(len(test_idx))
-
+    print("BEEEEEEEP",type(g.adj_matrix),type(g.attr_matrix))
     return train_labels, train_adj_matrix, train_attr_matrix, train_index, test_labels, test_adj_matrix, \
            test_attr_matrix, test_index, n, class_number, d, num_edges
 
