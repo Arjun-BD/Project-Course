@@ -209,25 +209,31 @@ def plot_accuracy_comparison(train_labels, train_adj_matrix, train_attr_matrix, 
     """
     Plot accuracy comparison for different k values and clustering modes.
     """
-    k_values = [2, 3, 4]
-    modes = ['nearest', 'farthest', 'random']
+    k_values = [2]
+    modes = ['nearest']
     
     # Store results
     results = {mode: {k: [] for k in k_values} for mode in modes}
     
-    # Run experiments
-    for mode in modes:
-        for k in k_values:
-            print(f"Running experiment: mode={mode}, k={k}")
-            mode_k_accuracies = []
-            for _ in range(FLAGS.num_iterations):
-                acc = run_experiment(
-                    train_labels, train_adj_matrix, train_attr_matrix, train_index, 
-                    test_labels, test_adj_matrix, test_attr_matrix, test_index, 
-                    centers, d, nc, k, mode
-                )
-                mode_k_accuracies.append(acc)
-            results[mode][k] = mode_k_accuracies
+    # Total number of experiments for progress bar
+    total_experiments = len(modes) * len(k_values) * FLAGS.num_iterations
+    
+    # Progress bar
+    with tqdm(total=total_experiments, desc="Running Experiments", unit="experiment") as pbar:
+        # Run experiments
+        for mode in modes:
+            for k in k_values:
+                print(f"\nRunning experiments: mode={mode}, k={k}")
+                mode_k_accuracies = []
+                for _ in range(FLAGS.num_iterations):
+                    acc = run_experiment(
+                        train_labels, train_adj_matrix, train_attr_matrix, train_index, 
+                        test_labels, test_adj_matrix, test_attr_matrix, test_index, 
+                        centers, d, nc, k, mode
+                    )
+                    mode_k_accuracies.append(acc)
+                    pbar.update(1)  # Update progress bar
+                results[mode][k] = mode_k_accuracies
     
     # Plotting
     plt.figure(figsize=(12, 6))
