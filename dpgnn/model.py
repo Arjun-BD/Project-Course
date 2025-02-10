@@ -42,7 +42,7 @@ class DPGNN:
         h = tf.matmul(h_drop, Wo)
 
         self.logits = h
-
+        print(tf.zeros((tf.shape(self.batch_labels)[0], nc)))
         self.weighted_logits = tf.tensor_scatter_nd_add(tf.zeros((tf.shape(self.batch_labels)[0], nc)),
                                                    self.batch_idx[:, None],
                                                    self.logits * self.batch_pprw[:, None])
