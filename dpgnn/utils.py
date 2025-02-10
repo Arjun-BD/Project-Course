@@ -8,6 +8,7 @@ from .privacy_utils.rdp_accountant import compute_rdp, get_privacy_spent
 from .sparsegraph import load_from_npz
 
 
+
 def sparse_feeder(M):
     # Convert a sparse matrix to the format suitable for feeding as a tf.SparseTensor
     M = M.tocoo()
@@ -64,6 +65,8 @@ def get_data(dataset_path, privacy_amplify_sampling_rate):
 
     # number of nodes and attributes
     n, d = g.attr_matrix.shape
+    # print(dir(g))
+    # print(vars(g))
     class_number = len(np.unique(g.labels))
     print("Loading {} graph with #nodes={}, #attributes={}, #classes={}".format(dataset_path.split('/')[-1], n, d,
                                                                                 class_number))
@@ -112,7 +115,6 @@ def get_data(dataset_path, privacy_amplify_sampling_rate):
     if sp.issparse(test_attr_matrix):
         test_attr_matrix = SparseRowIndexer(test_attr_matrix)
     test_index = np.arange(len(test_idx))
-
     return train_labels, train_adj_matrix, train_attr_matrix, train_index, test_labels, test_adj_matrix, \
            test_attr_matrix, test_index, n, class_number, d, num_edges
 
