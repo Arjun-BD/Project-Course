@@ -107,19 +107,15 @@ def clus(centers, vec, k=2, mode='nearest'):
     if mode not in {'nearest', 'farthest', 'random'}:
         raise ValueError("Mode must be 'nearest', 'farthest', or 'random'.")
     
-    # Normalize centers and vec for cosine similarity
-    norm_centers = centers / np.linalg.norm(centers, axis=1, keepdims=True)
-    norm_vec = vec / np.linalg.norm(vec)
+    # Calculate Euclidean distances
+    distances = np.sqrt(np.sum((centers - vec) ** 2, axis=1))
     
-    # Calculate cosine similarity
-    similarities = norm_centers @ norm_vec
-
     if mode == 'nearest':
-        # Get indices of k highest similarities
-        indices = np.argsort(-similarities)[:k]
+        # Get indices of k smallest distances
+        indices = np.argsort(distances)[:k]
     elif mode == 'farthest':
-        # Get indices of k lowest similarities
-        indices = np.argsort(similarities)[:k]
+        # Get indices of k largest distances
+        indices = np.argsort(-distances)[:k]
     elif mode == 'random':
         # Select k random indices
         indices = np.random.choice(len(centers), size=k, replace=False)
@@ -144,7 +140,7 @@ def run_experiment(train_labels, train_adj_matrix, train_attr_matrix, train_inde
         cen = clus(centers.toarray(), train_attr_matrix.toarray()[i], k=k, mode=mode)
         for j in range(len(train_labels)):
             if train_labels[j] in cen:
-                my_topk[i][j] = 1/element_counts[train_labels[j]]
+                my_topk[i][j] = 1/(element_counts[train_labels[j]])
             
     my_topk = sp.csr_matrix(my_topk)
 
@@ -209,9 +205,10 @@ def plot_accuracy_comparison(train_labels, train_adj_matrix, train_attr_matrix, 
     """
     Plot accuracy comparison for different k values and clustering modes.
     """
-    k_values = [2]
-    modes = ['nearest']
-    
+    # k_values = [2, 3, 4]
+    # modes = ['nearest', 'farthest', 'random']
+    k_values = [2,3,4]
+    modes = ['nearest','farthest', 'random']
     # Store results
     results = {mode: {k: [] for k in k_values} for mode in modes}
     
