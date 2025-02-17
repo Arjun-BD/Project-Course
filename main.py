@@ -30,12 +30,12 @@ logger.setLevel('INFO')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 ''' Configuration '''
-flags.DEFINE_string('data_file', 'data/cora_ml', 'Path to the .npz data file')
+flags.DEFINE_string('data_file', 'data/ms_academic', 'Path to the .npz data file')
 flags.DEFINE_float('lr', 5e-3, 'learning rate')
 flags.DEFINE_float('alpha', 0.25, 'PPR teleport probability')
-flags.DEFINE_float('rho', 1e-4, 'ISTA hyparameter rho')
+flags.DEFINE_float('rho', 1e-4, 'ISTA hyparameter rho') 
 flags.DEFINE_float('eps', 1e-4, 'ISTA hyparameter eps')
-flags.DEFINE_integer('topk', 4, 'Number of PPR neighbors for each node')
+flags.DEFINE_integer('topk', 2 , 'Number of PPR neighbors for each node')
 flags.DEFINE_bool('dp_ppr', False, 'Enable DP-PPR or not')
 flags.DEFINE_bool('EM', False, 'Enable EM or not')
 flags.DEFINE_bool('dp_sgd', False, 'Enable DP-SGD or not')
@@ -73,6 +73,8 @@ flags.DEFINE_float('dropout', 0.1, 'Dropout used for training')
 flags.DEFINE_integer('max_epochs', 200, 'Maximum number of epochs (exact number if no early stopping)')
 flags.DEFINE_integer('batch_size', 60, 'Batch size for training')
 flags.DEFINE_integer('nprop_inference', 2, 'Number of propagation steps during inference')
+flags.DEFINE_integer('epsilon_label_dp', 3, 'Epsilon for Label DP')
+flags.DEFINE_bool('label_dp', False, 'Use label DP or not')
 
 FLAGS = flags.FLAGS
 
@@ -86,9 +88,27 @@ def main(unused_argv):
     train_labels, train_adj_matrix, train_attr_matrix, train_index, test_labels, test_adj_matrix, \
     test_attr_matrix, test_index, num_nodes, num_class, num_attr, num_edges = utils.get_data(FLAGS.data_file,
                                                      privacy_amplify_sampling_rate=FLAGS.privacy_amplify_sampling_rate)
+    
+
+    
 
     d = num_attr
     nc = num_class
+
+    #-------------------Testing Label DP--------
+    if FLAGS.label_dp:
+        nc = len(set(train_labels))  # Number of unique classes (C)
+        p_keep = np.exp(FLAGS.epsilon_label_dp) / (np.exp(FLAGS.epsilon_label_dp) + nc - 1)
+
+        for i in range(len(train_labels)):
+            if np.random.rand() > p_keep:  # Flip with probability 1 - p_keep
+                new_label = np.random.choice([l for l in range(nc) if l != train_labels[i]])
+                train_labels[i] = new_label  # Ensure different label
+                
+        print("done label dp")
+    #-------------------------
+
+
     time_loading = time.time() - start
     print(f"Runtime: {time_loading:.2f}s")
     print("Finish Load Data.\n")
@@ -161,9 +181,13 @@ def main(unused_argv):
 
     ''' Preprocessing: Calculate PPR scores '''
     start = time.time()
-    topk_train = ppr.topk_ppr_matrix_ista(train_adj_matrix, FLAGS.alpha, FLAGS.eps, FLAGS.rho, train_index[:ppr_num],
+    if(not FLAGS.ppr_normalization == 'cosine_similarity'):
+        topk_train = ppr.topk_ppr_matrix_ista(train_adj_matrix, FLAGS.alpha, FLAGS.eps, FLAGS.rho, train_index[:ppr_num],
                                             FLAGS.topk, FLAGS.sigma_ista, FLAGS.clip_bound_ista, FLAGS.dp_ppr,
                                             FLAGS.em_sensitivity, FLAGS.report_val_eps, FLAGS.EM, FLAGS.EM_eps)
+
+    else : topk_train = ppr.random_walk_with_cosine_similarity(adj_matrix=train_adj_matrix, adj_attr_matrix=train_attr_matrix, alpha=FLAGS.alpha, num_steps=20, nodes=train_index[:ppr_num], topk=FLAGS.topk)
+
     if ppr_num < len(train_index):
         topk_train_I = np.identity(len(train_index))
         topk_train_I = topk_train_I[ppr_num:]
@@ -172,9 +196,11 @@ def main(unused_argv):
         topk_train = sp.csr_matrix(topk_train_dense_full)
 
     time_preprocessing = time.time() - start
+
+        
     print(f"Calculate Train PPR Matrix Runtime: {time_preprocessing:.2f}s")
 
-    # normalize l1 norm of each column of topk_train'''
+    # # normalize l1 norm of each column of topk_train'''
     topk_train_dense = topk_train.toarray()
     for col in range(len(topk_train_dense[0, :])):
         if np.linalg.norm(topk_train_dense[:, col], ord=1) != 0:
@@ -197,6 +223,7 @@ def main(unused_argv):
 
         train = train_solo
 
+
     sess = tf.Session()
     with sess.as_default():
         tf.global_variables_initializer().run()
@@ -216,7 +243,7 @@ def main(unused_argv):
         for epoch in tqdm(range(FLAGS.max_epochs)):
             random_index = np.random.permutation(len(train_labels))
             train_index = train_index[random_index]
-
+            
             train(
                 sess=sess, model=model, attr_matrix=train_attr_matrix,
                 train_idx=train_index, topk_train=topk_train, labels=train_labels,
@@ -233,7 +260,7 @@ def main(unused_argv):
         f = open("dp_experiment_out.txt", "a")
         f.write(f"dataset: {FLAGS.data_file}, GM: {FLAGS.dp_ppr}, EM:{FLAGS.EM}, V0:{FLAGS.report_val_eps}, DP-PPR epsilon: {epsilon}, DPSGD epsilon: {eps_sgd}, K: {FLAGS.topk}, Test acc: {test_acc:.4f}\n")
         f.close()
-
+        
 
 
 

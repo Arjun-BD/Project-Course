@@ -28,7 +28,7 @@ def calc_ppr_node_ista_p_dp(nnodes, alpha, epsilon, sigma, clip_bound, rho, out_
         S_k = np.where(p_vector_old - delta_fp_old >= rho * alpha)[0]
         Sk_list = list(S_k)
         delta_pk = -(delta_fp_old[S_k] + rho * alpha)
-
+    
         p_vector_new[S_k] = p_vector_old[S_k] + delta_pk
 
         delta_fp_new = delta_fp_old
@@ -129,3 +129,44 @@ def topk_ppr_matrix_ista(adj_matrix, alpha, eps, rho, idx, topk, sigma, clip_bou
                                 em_sensitivity, report_noise_val_eps, EM, EM_eps).tocsr()
 
     return topk_matrix
+
+def random_walk_with_cosine_similarity(adj_matrix, adj_attr_matrix, alpha, num_steps, nodes, topk):
+        """Perform a random walk with restart where transition probabilities are based on cosine similarity."""
+        nnodes = adj_matrix.shape[0]
+        attr_norms = np.linalg.norm(adj_attr_matrix.toarray(), axis=1)
+        attr_norms[attr_norms == 0] = 1e-12  # Avoid division by zero
+
+        # Compute cosine similarity matrix
+        cosine_sim_matrix = adj_attr_matrix @ adj_attr_matrix.T
+        cosine_sim_matrix /= attr_norms[:, None]
+        cosine_sim_matrix /= attr_norms[None, :]
+
+        # Normalize adjacency matrix with cosine similarity
+        transition_matrix = adj_matrix.multiply(cosine_sim_matrix) * -1 #weight highly oppositely correlated nodes more for testing.
+        transition_matrix = sp.diags(1 / transition_matrix.sum(axis=1).A1) @ transition_matrix
+        # def safe_softmax(x, axis=1):
+        #     x_max = np.max(x, axis=axis, keepdims=True)
+        #     exp_x = np.exp(x - x_max)
+        #     return exp_x / np.sum(exp_x, axis=axis, keepdims=True)
+
+        # transition_matrix_np = transition_matrix.toarray()
+        # transition_matrix = safe_softmax(transition_matrix_np)
+
+        personalized_vectors = []
+        for node in nodes:
+            # Initialize random walk probabilities
+            p = np.zeros(nnodes)
+            p[node] = 1
+            for _ in range(num_steps):
+                p = alpha * transition_matrix.T @ p + (1 - alpha) * np.eye(nnodes)[node]
+
+            # Pick top k elements and set everything else to zero
+            topk_indices = np.argpartition(p, -topk)[-topk:]
+            topk_values = p[topk_indices]
+            topk_vector = np.zeros_like(p)
+            topk_vector[topk_indices] = topk_values
+
+            personalized_vectors.append(sp.csr_matrix(topk_vector))
+
+        return sp.vstack(personalized_vectors)
+

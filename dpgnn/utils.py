@@ -31,6 +31,7 @@ class SparseRowIndexer:
         self.n_columns = csr_matrix.shape[1]
 
     def __getitem__(self, row_selector):
+        
         data = np.concatenate(self.data[row_selector])
         indices = np.concatenate(self.indices[row_selector])
         indptr = np.append(0, np.cumsum(self.indptr[row_selector]))
@@ -57,6 +58,8 @@ def get_data(dataset_path, privacy_amplify_sampling_rate):
     if dataset_name in ['cora_ml', 'pubmed', 'ms_academic']:
         dataset_path += ".npz"
 
+    if dataset_name in ['obgn_products', 'ogbn_proteins', 'ogbn_arxiv', 'ogbn_mag', 'ogbn_papers100M']:
+        return get_data_2(dataset_path, privacy_amplify_sampling_rate)
     g = load_from_npz(dataset_path)
     if dataset_path.split('/')[-1] in ['cora_full.npz']:
         g.standardize()
@@ -107,8 +110,8 @@ def get_data(dataset_path, privacy_amplify_sampling_rate):
 
     test_attr_matrix = dense_attr_matrix[test_idx, :]
     test_attr_matrix = sp.csr_matrix(test_attr_matrix)
-    if sp.issparse(test_attr_matrix):
-        test_attr_matrix = SparseRowIndexer(test_attr_matrix)
+    # if sp.issparse(test_attr_matrix):
+    # test_attr_matrix = SparseRowIndexer(test_attr_matrix)
     test_index = np.arange(len(test_idx))
 
     return train_labels, train_adj_matrix, train_attr_matrix, train_index, test_labels, test_adj_matrix, \

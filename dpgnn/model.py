@@ -92,6 +92,10 @@ class DPGNN:
 
     def gen_feed(self, attr_matrix, ppr_matrix, labels):
         source_idx, neighbor_idx = ppr_matrix.nonzero()
+        
+        # Ensure source_idx and neighbor_idx are np.int32
+        source_idx = source_idx.astype(np.int32)
+        neighbor_idx = neighbor_idx.astype(np.int32)
 
         batch_attr = attr_matrix[neighbor_idx]
         feed = {
@@ -118,34 +122,58 @@ class DPGNN:
                                    ))
         logits = np.row_stack(logits)
         return logits
-
+    
     def predict(self, sess, adj_matrix, attr_matrix, alpha,
-                nprop=2, ppr_normalization='sym', batch_size_logits=10000):
+                    nprop=2, ppr_normalization='sym', batch_size_logits=10000):
 
+            local_logits = self._get_logits(sess, attr_matrix, adj_matrix.shape[0], batch_size_logits)
+            logits = local_logits.copy()
 
-        local_logits = self._get_logits(sess, attr_matrix, adj_matrix.shape[0], batch_size_logits)
-        logits = local_logits.copy()
+            if ppr_normalization == 'sym':
+                # Assume undirected (symmetric) adjacency matrix
+                deg = adj_matrix.sum(1).A1
+                deg_sqrt_inv = 1. / np.sqrt(np.maximum(deg, 1e-12))
+                for _ in range(nprop):  # power iteration
+                    logits = (1 - alpha) * deg_sqrt_inv[:, None] * (adj_matrix @ (deg_sqrt_inv[:, None] * logits)) + alpha * local_logits
+            elif ppr_normalization == 'col':
+                deg_col = adj_matrix.sum(0).A1
+                deg_col_inv = 1. / np.maximum(deg_col, 1e-12)
+                for _ in range(nprop):
+                    logits = (1 - alpha) * (adj_matrix @ (deg_col_inv[:, None] * logits)) + alpha * local_logits
+            elif ppr_normalization == 'row':
+                deg_row = adj_matrix.sum(1).A1
+                deg_row_inv_alpha = (1 - alpha) / np.maximum(deg_row, 1e-12)
+                for _ in range(nprop):
+                    logits = deg_row_inv_alpha[:, None] * (adj_matrix @ logits) + alpha * local_logits
+            elif ppr_normalization == 'cosine_similarity':
+       
+                attr_norms = np.linalg.norm(attr_matrix.toarray(), axis=1)
+                attr_norms[attr_norms == 0] = 1e-12  # Avoid division by zero
 
-        if ppr_normalization == 'sym':
-            # Assume undirected (symmetric) adjacency matrix
-            deg = adj_matrix.sum(1).A1
-            deg_sqrt_inv = 1. / np.sqrt(np.maximum(deg, 1e-12))
-            for _ in range(nprop):  # power iteration
-                logits = (1 - alpha) * deg_sqrt_inv[:, None] * (adj_matrix @ (deg_sqrt_inv[:, None] * logits)) + alpha * local_logits
-        elif ppr_normalization == 'col':
-            deg_col = adj_matrix.sum(0).A1
-            deg_col_inv = 1. / np.maximum(deg_col, 1e-12)
-            for _ in range(nprop):
-                logits = (1 - alpha) * (adj_matrix @ (deg_col_inv[:, None] * logits)) + alpha * local_logits
-        elif ppr_normalization == 'row':
-            deg_row = adj_matrix.sum(1).A1
-            deg_row_inv_alpha = (1 - alpha) / np.maximum(deg_row, 1e-12)
-            for _ in range(nprop):
-                logits = deg_row_inv_alpha[:, None] * (adj_matrix @ logits) + alpha * local_logits
-        else:
-            raise ValueError(f"Unknown PPR normalization: {ppr_normalization}")
-        predictions = logits.argmax(1)
-        return predictions
+                # Compute cosine similarity matrix
+                cosine_sim_matrix = attr_matrix @ attr_matrix.T
+                cosine_sim_matrix /= attr_norms[:, None]
+                cosine_sim_matrix /= attr_norms[None, :]
+
+                # Normalize adjacency matrix with cosine similarity
+                transition_matrix = adj_matrix.multiply(cosine_sim_matrix)
+                transition_matrix = sp.diags(1 / transition_matrix.sum(axis=1).A1) @ transition_matrix
+                # def safe_softmax(x, axis=1):
+                #             x_max = np.max(x, axis=axis, keepdims=True)
+                #             exp_x = np.exp(x - x_max)
+                #             return exp_x / np.sum(exp_x, axis=axis, keepdims=True)
+
+                # transition_matrix_np = transition_matrix.toarray()
+                # transition_matrix = safe_softmax(transition_matrix_np)
+                transition_matrix = -1 * transition_matrix
+                
+                for _ in range(nprop):
+                        logits = (1 - alpha) * (transition_matrix.T @ logits) + alpha * local_logits
+                            
+            else:
+                raise ValueError(f"Unknown PPR normalization: {ppr_normalization}")
+            predictions = logits.argmax(1)
+            return predictions
 
     def get_vars(self, sess):
         return sess.run(tf.trainable_variables())
@@ -162,7 +190,7 @@ def train(sess, model, attr_matrix, train_idx, topk_train, labels, epoch, batch_
         attr_matrix = SparseRowIndexer(attr_matrix)
 
     for i in range(0, len(train_idx), batch_size):
-        if (i + batch_size)<=len(labels):
+        if (i + batch_size) <= len(labels):
             feed_train = model.feed_for_batch_train(attr_matrix,
                                                     topk_train[train_idx[i:i + batch_size]],
                                                     labels[train_idx[i:i + batch_size]],
