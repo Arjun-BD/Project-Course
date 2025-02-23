@@ -89,9 +89,8 @@ def main(unused_argv):
     test_attr_matrix, test_index, num_nodes, num_class, num_attr, num_edges = utils.get_data(FLAGS.data_file,
                                                      privacy_amplify_sampling_rate=FLAGS.privacy_amplify_sampling_rate)
     
-
-    
-
+    print(train_labels.shape)
+    np.savez(f'train_adj&train_attrcoraml.npz', train_adj_matrix=train_adj_matrix.toarray(), train_attr_matrix=train_attr_matrix.toarray(), train_labels = train_labels)
     d = num_attr
     nc = num_class
 
@@ -251,6 +250,12 @@ def main(unused_argv):
 
         print("Training finished.")
         # power iteration inference
+        variables = tf.trainable_variables()
+        layer_vars = sess.run(variables)
+        param_dict = {var.name : sess.run(var) for var in variables}
+        print(param_dict)
+        #save model
+        np.savez(f'model_cora_ml_sampling50pct.npz', **param_dict)
         predictions = model.predict(
             sess=sess, adj_matrix=test_adj_matrix, attr_matrix=test_attr_matrix, alpha=FLAGS.alpha,
             nprop=FLAGS.nprop_inference, ppr_normalization=FLAGS.ppr_normalization)
@@ -259,7 +264,7 @@ def main(unused_argv):
 
         f = open("dp_experiment_out.txt", "a")
         f.write(f"dataset: {FLAGS.data_file}, GM: {FLAGS.dp_ppr}, EM:{FLAGS.EM}, V0:{FLAGS.report_val_eps}, DP-PPR epsilon: {epsilon}, DPSGD epsilon: {eps_sgd}, K: {FLAGS.topk}, Test acc: {test_acc:.4f}\n")
-        f.close()
+        f.close() 
         
 
 
