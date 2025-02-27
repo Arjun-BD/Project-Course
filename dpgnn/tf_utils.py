@@ -1,7 +1,7 @@
 from typing import Union
 import numpy as np
 import scipy.sparse as sp
-import tensorflow as tf
+import tensorflow.compat.v1 as tf
 
 
 def sparse_dropout(X: tf.SparseTensor, rate: float) -> tf.SparseTensor:

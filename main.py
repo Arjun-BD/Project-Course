@@ -30,7 +30,7 @@ logger.setLevel('INFO')
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 ''' Configuration '''
-flags.DEFINE_string('data_file', 'data/ms_academic', 'Path to the .npz data file')
+flags.DEFINE_string('data_file', 'data/cora_ml', 'Path to the .npz data file')
 flags.DEFINE_float('lr', 5e-3, 'learning rate')
 flags.DEFINE_float('alpha', 0.25, 'PPR teleport probability')
 flags.DEFINE_float('rho', 1e-4, 'ISTA hyparameter rho') 
@@ -80,6 +80,8 @@ FLAGS = flags.FLAGS
 
 
 def main(unused_argv):
+    tf.compat.v1.disable_v2_behavior()
+
     ''' Load Data '''
     start = time.time()
 
@@ -90,7 +92,14 @@ def main(unused_argv):
                                                      privacy_amplify_sampling_rate=FLAGS.privacy_amplify_sampling_rate)
     
     print(train_labels.shape)
-    np.savez(f'train_adj&train_attrcoraml.npz', train_adj_matrix=train_adj_matrix.toarray(), train_attr_matrix=train_attr_matrix.toarray(), train_labels = train_labels)
+    temp = FLAGS.data_file.split('/')[1]
+
+    np.savez(f"train_adj&train_attr{temp}.npz", 
+         train_adj_matrix=train_adj_matrix.toarray(), 
+         train_attr_matrix=train_attr_matrix.toarray(), 
+         train_labels=train_labels)
+
+
     d = num_attr
     nc = num_class
 
@@ -255,7 +264,8 @@ def main(unused_argv):
         param_dict = {var.name : sess.run(var) for var in variables}
         print(param_dict)
         #save model
-        np.savez(f'model_cora_ml_sampling50pct.npz', **param_dict)
+      
+        np.savez(f'model_{temp}_dpsgd_{FLAGS.dp_ppr}_sampling{FLAGS.privacy_amplify_sampling_rate * 100}_eps{epsilon}pct.npz', **param_dict)
         predictions = model.predict(
             sess=sess, adj_matrix=test_adj_matrix, attr_matrix=test_attr_matrix, alpha=FLAGS.alpha,
             nprop=FLAGS.nprop_inference, ppr_normalization=FLAGS.ppr_normalization)
@@ -263,6 +273,8 @@ def main(unused_argv):
         print(f'''Testing accuracy: {test_acc:.4f}''')
 
         f = open("dp_experiment_out.txt", "a")
+
+        print('Epsilon : ', epsilon)
         f.write(f"dataset: {FLAGS.data_file}, GM: {FLAGS.dp_ppr}, EM:{FLAGS.EM}, V0:{FLAGS.report_val_eps}, DP-PPR epsilon: {epsilon}, DPSGD epsilon: {eps_sgd}, K: {FLAGS.topk}, Test acc: {test_acc:.4f}\n")
         f.close() 
         
