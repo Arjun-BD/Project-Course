@@ -107,6 +107,7 @@ def get_data(dataset_path, privacy_amplify_sampling_rate, drop_randomn_edges, pc
         for edge in edges_to_drop:
             train_adj_matrix[edge_positions[0][edge], edge_positions[1][edge]] = 0
 
+
     np.fill_diagonal(train_adj_matrix, 1)
     train_adj_matrix = sp.csr_matrix(train_adj_matrix)
 

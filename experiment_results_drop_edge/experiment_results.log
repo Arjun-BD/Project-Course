@@ -1,0 +1,6 @@
+Drop edge rate: 0.05, Accuracy: 0.8607
+Drop edge rate: 0.15, Accuracy: 0.8328
+Drop edge rate: 0.25, Accuracy: 0.8297
+Drop edge rate: 0.35, Accuracy: 0.8483
+Drop edge rate: 0.45, Accuracy: 0.8483
+Drop edge rate: 0.55, Accuracy: 0.8545
