@@ -31,7 +31,7 @@ class SparseRowIndexer:
         self.n_columns = csr_matrix.shape[1]
 
     def __getitem__(self, row_selector):
-        
+
         data = np.concatenate(self.data[row_selector])
         indices = np.concatenate(self.indices[row_selector])
         indptr = np.append(0, np.cumsum(self.indptr[row_selector]))
@@ -48,8 +48,8 @@ def split_random(n, n_train):
     return train_idx, test_idx
 
 
-def get_data(dataset_path, privacy_amplify_sampling_rate):
-    
+def get_data(dataset_path, privacy_amplify_sampling_rate, drop_randomn_edges, pct_drop_edges):
+
     dataset_name = dataset_path.split('/')[-1]
 
     if dataset_name in ['amazon', 'facebook', 'reddit', 'physics']:
@@ -63,7 +63,7 @@ def get_data(dataset_path, privacy_amplify_sampling_rate):
     g = load_from_npz(dataset_path)
     if dataset_path.split('/')[-1] in ['cora_full.npz']:
         g.standardize()
-    
+
 
     # number of nodes and attributes
     n, d = g.attr_matrix.shape
@@ -95,12 +95,27 @@ def get_data(dataset_path, privacy_amplify_sampling_rate):
     train_labels = g.labels[train_idx]
     train_adj_matrix = dense_adj_matrix[train_idx, :][:, train_idx]
     num_edges = sum(sum(train_adj_matrix))
+
+    #drop random_edges if flag is set to true
+    if drop_randomn_edges:
+        ones_count = np.sum(train_adj_matrix)
+        number_of_edges_dropped = int(round(ones_count * pct_drop_edges))
+        edge_positions = np.where(train_adj_matrix == 1)
+
+        # Randomly select edges to drop
+        edges_to_drop = np.random.choice(range(len(edge_positions[0])), size=number_of_edges_dropped, replace=False)
+        for edge in edges_to_drop:
+            train_adj_matrix[edge_positions[0][edge], edge_positions[1][edge]] = 0
+
     np.fill_diagonal(train_adj_matrix, 1)
     train_adj_matrix = sp.csr_matrix(train_adj_matrix)
 
     train_attr_matrix = dense_attr_matrix[train_idx, :]
     train_attr_matrix = sp.csr_matrix(train_attr_matrix)
     train_index = np.arange(len(train_idx))
+
+
+
 
     # generate test subgraph
     test_labels = g.labels[test_idx]
@@ -119,7 +134,7 @@ def get_data(dataset_path, privacy_amplify_sampling_rate):
 
 
 def get_data_3(dataset_path, privacy_amplify_sampling_rate):
-    
+
     features = np.loadtxt(os.path.join(dataset_path, "node_features.csv"), delimiter=",")
     labels = np.loadtxt(os.path.join(dataset_path, "node_labels.csv"), delimiter=",", dtype=np.int32)
     total_rows = np.loadtxt(os.path.join(dataset_path, "senders.csv"), delimiter=",", dtype=np.int32)
@@ -151,7 +166,7 @@ def get_data_3(dataset_path, privacy_amplify_sampling_rate):
     n, d = features.shape
     num_edges = len(train_idx)
 
-    
+
 
     return train_labels, train_adj_matrix, train_attr_matrix, train_index, test_labels, test_adj_matrix, \
            test_attr_matrix, test_index, n, class_number, d, num_edges
@@ -172,17 +187,17 @@ def get_data_2(dataset_path, privacy_amplify_sampling_rate):
         _features = np.loadtxt(os.path.join(dataset_path, 'raw/node-feat.csv.gz'), delimiter=',')
         _labels = np.loadtxt(os.path.join(dataset_path, 'raw/node-label.csv.gz'), delimiter=',')
         _edge = np.loadtxt(os.path.join(dataset_path, 'raw/edge.csv.gz'), delimiter=',')
-        
+
         n, d = _features.shape
         class_number = len(np.unique(_labels))
-        
+
         train_total_idx = np.loadtxt(train_split_file, delimiter=',', dtype=np.int32)
         test_idx = np.loadtxt(test_split_file, delimiter=',', dtype=np.int32)
-        
+
         # use subsamples from all train nodes for actual training (privacy amplification)
         train_total_idx = np.random.permutation(train_total_idx)
         train_idx = train_total_idx[:int(np.ceil(privacy_amplify_sampling_rate*len(train_total_idx)))]
-         
+
         _graph = nx.Graph()
         _graph.add_edges_from(_edge)
         _adj_matrix = nx.to_scipy_sparse_matrix(_graph)
@@ -208,17 +223,17 @@ def get_data_2(dataset_path, privacy_amplify_sampling_rate):
 
 
     elif dataset_name in ['facebook']:
-  
+
         _name = "facebook"
         _targets = ['status', 'gender', 'major', 'minor', 'housing', 'year']
         _data_path = os.path.join(dataset_path, "UIllinois20.mat")
         _data_dict = loadmat(_data_path)
-        
+
         # Load graph
         _adj_matrix = sp.csr_matrix(_data_dict['A'])
         _attr_matrix = _data_dict['local_info'][:,:-1]
         _labels = _data_dict['local_info'][:,-1]
-        
+
         n, d = _attr_matrix.shape
         class_number = len(np.unique(_labels))
         print("Loading {} graph with #nodes={}, #attributes={}, #classes={}".format(dataset_path.split('/')[-1], n, d,
@@ -255,7 +270,7 @@ def get_data_2(dataset_path, privacy_amplify_sampling_rate):
         test_index = np.arange(len(test_idx))
 
     elif dataset_name in ['reddit']:
-    
+
         _graph_data_path = os.path.join(dataset_path, "raw", "reddit_graph.npz")
         _attr_data_path = os.path.join(dataset_path, "raw", "reddit_data.npz")
         _name = "reddit"
@@ -270,27 +285,27 @@ def get_data_2(dataset_path, privacy_amplify_sampling_rate):
         class_number = len(np.unique(_labels))
         print("Loading {} graph with #nodes={}, #attributes={}, #classes={}".format(dataset_path.split('/')[-1], n, d,
                                                                                 class_number))
-        
+
         # split train/test nodes
         train_total_idx = np.loadtxt(os.path.join(dataset_path, "processed", "reddit_train_total_idx.csv"), delimiter=',', dtype=np.int32)
         valid_idx = np.loadtxt(os.path.join(dataset_path, "processed", "reddit_valid_idx.csv"), delimiter=',', dtype=np.int32)
         test_idx = np.loadtxt(os.path.join(dataset_path, "processed", "reddit_test_idx.csv"), delimiter=',', dtype=np.int32)
-        
+
         # Use subsamples from all train nodes
         train_total_idx = np.random.permutation(train_total_idx)
         train_idx = train_total_idx[:int(np.ceil(privacy_amplify_sampling_rate*len(train_total_idx)))]
-        
+
         # Cut the graph
         _graph_train = _get_graph_for_split_with_self_loop(_adj_matrix, train_idx)
         _graph_test = _get_graph_for_split_with_self_loop(_adj_matrix, test_idx)
-        
+
         # Generate train subgraph
         train_labels = _labels[train_idx]
         train_adj_matrix = nx.to_scipy_sparse_matrix(_graph_train)
         train_attr_matrix = sp.csr_matrix(_attr_matrix[train_idx, :])
         train_index = np.arange(len(train_idx))
         num_edges = _graph_train.number_of_edges()
-        
+
         # Generate test subgraph
         test_labels = _labels[test_idx]
         test_adj_matrix = nx.to_scipy_sparse_matrix(_graph_test)
@@ -311,7 +326,7 @@ def _get_graph_for_split_with_self_loop(adj_full, split_set):
     for sender, receiver in zip(senders, receivers):
       if sender in split_set and receiver in split_set:
         yield sender, receiver
-  
+
   def self_loop_generator():
     for idx in split_set:
       yield idx, idx

@@ -33,7 +33,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 flags.DEFINE_string('data_file', 'data/cora_ml', 'Path to the .npz data file')
 flags.DEFINE_float('lr', 5e-3, 'learning rate')
 flags.DEFINE_float('alpha', 0.25, 'PPR teleport probability')
-flags.DEFINE_float('rho', 1e-4, 'ISTA hyparameter rho') 
+flags.DEFINE_float('rho', 1e-4, 'ISTA hyparameter rho')
 flags.DEFINE_float('eps', 1e-4, 'ISTA hyparameter eps')
 flags.DEFINE_integer('topk', 2 , 'Number of PPR neighbors for each node')
 flags.DEFINE_bool('dp_ppr', False, 'Enable DP-PPR or not')
@@ -75,12 +75,14 @@ flags.DEFINE_integer('batch_size', 60, 'Batch size for training')
 flags.DEFINE_integer('nprop_inference', 2, 'Number of propagation steps during inference')
 flags.DEFINE_integer('epsilon_label_dp', 3, 'Epsilon for Label DP')
 flags.DEFINE_bool('label_dp', False, 'Use label DP or not')
+flags.DEFINE_bool('drop_random_edges', False, 'Drop random edges in training graph')
+flags.DEFINE_float('pct_drop_random_edges', 0.05, 'Percentage of random edges to be dropped during training')
 
 FLAGS = flags.FLAGS
 
 
 def main(unused_argv):
-    tf.compat.v1.disable_v2_behavior()
+    tf.disable_v2_behavior()
 
     ''' Load Data '''
     start = time.time()
@@ -89,14 +91,14 @@ def main(unused_argv):
 
     train_labels, train_adj_matrix, train_attr_matrix, train_index, test_labels, test_adj_matrix, \
     test_attr_matrix, test_index, num_nodes, num_class, num_attr, num_edges = utils.get_data(FLAGS.data_file,
-                                                     privacy_amplify_sampling_rate=FLAGS.privacy_amplify_sampling_rate)
-    
+                                                     privacy_amplify_sampling_rate=FLAGS.privacy_amplify_sampling_rate, pct_drop_edges=FLAGS.pct_drop_random_edges, drop_randomn_edges=FLAGS.drop_random_edges)
+
     print(train_labels.shape)
     temp = FLAGS.data_file.split('/')[1]
 
-    np.savez(f"train_adj&train_attr{temp}.npz", 
-         train_adj_matrix=train_adj_matrix.toarray(), 
-         train_attr_matrix=train_attr_matrix.toarray(), 
+    np.savez(f"train_adj&train_attr{temp}.npz",
+         train_adj_matrix=train_adj_matrix.toarray(),
+         train_attr_matrix=train_attr_matrix.toarray(),
          train_labels=train_labels)
 
 
@@ -112,7 +114,7 @@ def main(unused_argv):
             if np.random.rand() > p_keep:  # Flip with probability 1 - p_keep
                 new_label = np.random.choice([l for l in range(nc) if l != train_labels[i]])
                 train_labels[i] = new_label  # Ensure different label
-                
+
         print("done label dp")
     #-------------------------
 
@@ -205,7 +207,7 @@ def main(unused_argv):
 
     time_preprocessing = time.time() - start
 
-        
+
     print(f"Calculate Train PPR Matrix Runtime: {time_preprocessing:.2f}s")
 
     # # normalize l1 norm of each column of topk_train'''
@@ -219,7 +221,7 @@ def main(unused_argv):
     ''' Training: Set up model and train '''
     tf.reset_default_graph()
     tf.set_random_seed(0)
-    
+
     if use_enc:
         model = DPGNN_enc(d, nc, FLAGS.hidden_size, FLAGS.nlayers, FLAGS.nEncLayers, FLAGS.nEncOut, FLAGS.lr, FLAGS.weight_decay, FLAGS.dropout, FLAGS.EncDropout,
                       FLAGS.clip_bound_sgd, FLAGS.sigma_sgd, FLAGS.microbatches, dp_sgd=FLAGS.dp_sgd, enc_dp_sgd=FLAGS.Enc_dp_sgd,
@@ -251,7 +253,7 @@ def main(unused_argv):
         for epoch in tqdm(range(FLAGS.max_epochs)):
             random_index = np.random.permutation(len(train_labels))
             train_index = train_index[random_index]
-            
+
             train(
                 sess=sess, model=model, attr_matrix=train_attr_matrix,
                 train_idx=train_index, topk_train=topk_train, labels=train_labels,
@@ -264,8 +266,8 @@ def main(unused_argv):
         param_dict = {var.name : sess.run(var) for var in variables}
         print(param_dict)
         #save model
-      
-        np.savez(f'model_{temp}_dpsgd_{FLAGS.dp_ppr}_sampling{FLAGS.privacy_amplify_sampling_rate * 100}_eps{epsilon}pct.npz', **param_dict)
+
+        np.savez(f'model_{temp}_dpsgd_{FLAGS.dp_ppr}_sampling{FLAGS.privacy_amplify_sampling_rate * 100}_eps{epsilon}pct,drop_randomedges{FLAGS.drop_random_edges}{FLAGS.pct_drop_random_edges}.npz', **param_dict)
         predictions = model.predict(
             sess=sess, adj_matrix=test_adj_matrix, attr_matrix=test_attr_matrix, alpha=FLAGS.alpha,
             nprop=FLAGS.nprop_inference, ppr_normalization=FLAGS.ppr_normalization)
@@ -276,8 +278,8 @@ def main(unused_argv):
 
         print('Epsilon : ', epsilon)
         f.write(f"dataset: {FLAGS.data_file}, GM: {FLAGS.dp_ppr}, EM:{FLAGS.EM}, V0:{FLAGS.report_val_eps}, DP-PPR epsilon: {epsilon}, DPSGD epsilon: {eps_sgd}, K: {FLAGS.topk}, Test acc: {test_acc:.4f}\n")
-        f.close() 
-        
+        f.close()
+
 
 
 

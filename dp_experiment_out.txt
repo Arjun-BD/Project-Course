@@ -1172,3 +1172,4 @@ dataset: data/cora_ml, GM: True, EM:False, V0:-1.0, DP-PPR epsilon: 4.3139949948
 dataset: data/cora_ml, GM: True, EM:False, V0:-1.0, DP-PPR epsilon: 5.363034437923216, DPSGD epsilon: 0, K: 2, Test acc: 0.6285
 dataset: data/cora_ml, GM: True, EM:False, V0:-1.0, DP-PPR epsilon: 6.406301171609443, DPSGD epsilon: 0, K: 2, Test acc: 0.4644
 dataset: data/cora_ml, GM: True, EM:False, V0:-1.0, DP-PPR epsilon: 7.442893554003019, DPSGD epsilon: 0, K: 2, Test acc: 0.4737
+dataset: data/cora_ml, GM: False, EM:False, V0:-1.0, DP-PPR epsilon: 0, DPSGD epsilon: 0, K: 2, Test acc: 0.8421
