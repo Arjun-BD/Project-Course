@@ -14,7 +14,11 @@ from dpgnn.model import DPGNN, train as train_solo
 from dpgnn.model_enc import DPGNN as DPGNN_enc, train as train_w_enc, train_encoder
 from tqdm import tqdm
 from pynverse import inversefunc
-
+import networkx as nx
+import scipy.sparse as sp
+from node2vec import Node2Vec
+from scipy.spatial.distance import cdist
+from scipy.sparse import csr_matrix
 
 # Set up logging
 logger = logging.getLogger()
@@ -75,8 +79,93 @@ flags.DEFINE_integer('batch_size', 60, 'Batch size for training')
 flags.DEFINE_integer('nprop_inference', 2, 'Number of propagation steps during inference')
 flags.DEFINE_integer('epsilon_label_dp', 3, 'Epsilon for Label DP')
 flags.DEFINE_bool('label_dp', False, 'Use label DP or not')
+flags.DEFINE_bool('feature_aware',False,'Activates feature aware PPR')
+flags.DEFINE_bool('gravity',False,'Determines whether to use a gravity based clustering instead of PPR')
+flags.DEFINE_bool('heat',False,'Determines whether to use a heat transfer    based clustering instead of PPR')
 
 FLAGS = flags.FLAGS
+
+def compute_Q(adj_matrix):
+    
+    if isinstance(adj_matrix, csr_matrix):
+        adj_matrix = adj_matrix.toarray()
+    G = nx.from_numpy_array(adj_matrix)
+    N = len(adj_matrix)
+    edges = G.number_of_edges()
+    
+    # Compute shortest path lengths
+    shortest_paths = dict(nx.all_pairs_shortest_path_length(G))
+    R = np.zeros((N, N))
+    for i in range(N):
+        for j in range(N):
+            if i != j:
+                R[i, j] = shortest_paths[i].get(j, np.inf)  # Use np.inf if no path exists
+    
+    # Compute closeness centrality
+    CC = np.array([ (N-1) / np.sum(R[i]) if np.sum(R[i]) != 0 else 0 for i in range(N) ])
+    
+    # Compute network density
+    density_G = (2 * edges) / (N * (N - 1))
+    
+    # Compute degree density
+    degrees = np.array([G.degree(i) for i in range(N)])
+    Dd = np.zeros((N, N))
+    for i in range(N):
+        for j in range(N):
+            if R[i, j] > 0 and R[i, j] != np.inf:
+                Dd[i, j] = degrees[j] / (np.pi * R[i, j]**2)
+    
+    # Compute exponent term e^(EC(vi) - EC(vj))
+    EC = np.array(list(nx.eigenvector_centrality_numpy(G).values()))
+    exp_EC_diff = np.exp(EC[:, None] - EC[None, :])
+    
+    # Compute final Q values
+    Q = np.zeros((N, N))
+    for i in range(N):
+        for j in range(N):
+            if i != j and R[i, j] > 0 and R[i, j] != np.inf:
+                Q[i, j] = (degrees[i] * exp_EC_diff[i, j] * density_G * Dd[i, j]) / R[i, j]
+    
+    return Q
+
+
+def compute_node2vec_embeddings(adj_matrix, dim=16, walk_length=30, num_walks=200, p=1, q=1):
+
+    # Convert sparse adjacency matrix to a NetworkX graph
+    if sp.issparse(adj_matrix):  # If sparse
+        G = nx.from_scipy_sparse_matrix(adj_matrix)
+    else:  # If dense
+        G = nx.from_numpy_array(adj_matrix)
+
+    # Run Node2Vec
+    node2vec = Node2Vec(G, dimensions=dim, walk_length=walk_length, num_walks=num_walks, p=p, q=q, workers=1)
+    model = node2vec.fit(window=10, min_count=1, batch_words=4)
+
+    # Extract embeddings, ensuring node order matches adjacency matrix indices
+    embeddings = np.array([model.wv[str(node)] for node in sorted(G.nodes())])
+
+    return embeddings
+
+def compute_gravitational_importance(adj_matrix, embeddings, G_const=1e-3):
+    """Compute gravitational force-based node importance using adjacency matrix."""
+    
+    # Compute node degrees from adjacency matrix (supports sparse and dense formats)
+    if isinstance(adj_matrix, csr_matrix):  # Sparse case
+        degrees = np.array(adj_matrix.sum(axis=1)).flatten()
+    else:  # Dense case
+        degrees = np.sum(adj_matrix, axis=1)
+    
+    # Compute pairwise Euclidean distances between node embeddings
+    dist_matrix = cdist(embeddings, embeddings, metric="euclidean")
+
+    # Avoid division by zero
+    dist_matrix[dist_matrix < 1e-6] = 1e-6  
+
+    # Compute gravitational force: F_ij = G * (m_i * m_j) / d_ij^2
+    gravity_matrix = G_const * np.outer(degrees, degrees) / (dist_matrix ** 2)
+    
+    return gravity_matrix
+
 
 
 def main(unused_argv):
@@ -136,7 +225,7 @@ def main(unused_argv):
         epsilon *= FLAGS.privacy_amplify_sampling_rate
         delta *= FLAGS.privacy_amplify_sampling_rate
         privacy_record = f'''DP budget for DP-PPR using Gaussian Mechanism: epsilon={epsilon:.4f}, delat={delta}'''
-        print(privacy_record)
+        
     elif FLAGS.EM == True:
         eps_prime = min(FLAGS.topk * FLAGS.EM_eps,
                         FLAGS.topk * FLAGS.EM_eps * (math.exp(FLAGS.EM_eps) - 1) / (math.exp(FLAGS.EM_eps) + 1) + FLAGS.EM_eps * np.sqrt(
@@ -190,9 +279,23 @@ def main(unused_argv):
     ''' Preprocessing: Calculate PPR scores '''
     start = time.time()
     if(not FLAGS.ppr_normalization == 'cosine_similarity'):
-        topk_train = ppr.topk_ppr_matrix_ista(train_adj_matrix, FLAGS.alpha, FLAGS.eps, FLAGS.rho, train_index[:ppr_num],
-                                            FLAGS.topk, FLAGS.sigma_ista, FLAGS.clip_bound_ista, FLAGS.dp_ppr,
-                                            FLAGS.em_sensitivity, FLAGS.report_val_eps, FLAGS.EM, FLAGS.EM_eps)
+        if(not FLAGS.gravity and not FLAGS.heat):
+            topk_train = ppr.topk_ppr_matrix_ista(train_adj_matrix, FLAGS.alpha, FLAGS.eps, FLAGS.rho, train_index[:ppr_num],
+                                                FLAGS.topk, FLAGS.sigma_ista, FLAGS.clip_bound_ista, FLAGS.dp_ppr,
+                                                FLAGS.em_sensitivity, FLAGS.report_val_eps, FLAGS.EM, FLAGS.EM_eps,features = train_attr_matrix,Feature_Aware=FLAGS.feature_aware)
+        elif(not FLAGS.gravity):
+            topk_train = compute_Q(train_adj_matrix)
+            
+            topk_train = sp.csr_matrix(topk_train)
+            print(topk_train)
+        else:
+            embeddings = compute_node2vec_embeddings(train_adj_matrix)
+            topk_train = compute_gravitational_importance(train_adj_matrix,embeddings)
+            threshold = 1e-4
+            topk_train[topk_train < threshold] = 0
+
+            topk_train = sp.csr_matrix(topk_train)
+            
 
     else : topk_train = ppr.random_walk_with_cosine_similarity(adj_matrix=train_adj_matrix, adj_attr_matrix=train_attr_matrix, alpha=FLAGS.alpha, num_steps=20, nodes=train_index[:ppr_num], topk=FLAGS.topk)
 
@@ -262,13 +365,20 @@ def main(unused_argv):
         variables = tf.trainable_variables()
         layer_vars = sess.run(variables)
         param_dict = {var.name : sess.run(var) for var in variables}
-        print(param_dict)
+        # print(param_dict)
         #save model
       
-        np.savez(f'model_{temp}_dpsgd_{FLAGS.dp_ppr}_sampling{FLAGS.privacy_amplify_sampling_rate * 100}_eps{epsilon}pct.npz', **param_dict)
-        predictions = model.predict(
-            sess=sess, adj_matrix=test_adj_matrix, attr_matrix=test_attr_matrix, alpha=FLAGS.alpha,
-            nprop=FLAGS.nprop_inference, ppr_normalization=FLAGS.ppr_normalization)
+        # np.savez(f'model_{temp}_dpsgd_{FLAGS.dp_ppr}_sampling{FLAGS.privacy_amplify_sampling_rate * 100}_eps{epsilon}pct.npz', **param_dict)
+        if FLAGS.gravity:
+            embeddings = compute_node2vec_embeddings(test_adj_matrix)
+            predictions = model.predict(
+                sess=sess, adj_matrix=test_adj_matrix, attr_matrix=test_attr_matrix, alpha=FLAGS.alpha,
+                nprop=FLAGS.nprop_inference, ppr_normalization=FLAGS.ppr_normalization,feature_aware=FLAGS.feature_aware,features=test_attr_matrix,gravity = True,embeddings=embeddings)
+        else:
+
+            predictions = model.predict(
+                sess=sess, adj_matrix=test_adj_matrix, attr_matrix=test_attr_matrix, alpha=FLAGS.alpha,
+                nprop=FLAGS.nprop_inference, ppr_normalization=FLAGS.ppr_normalization,feature_aware=FLAGS.feature_aware,features=test_attr_matrix,heat = FLAGS.heat)
         test_acc = accuracy_score(test_labels, predictions)
         print(f'''Testing accuracy: {test_acc:.4f}''')
 

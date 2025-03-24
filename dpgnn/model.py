@@ -5,7 +5,9 @@ from . import utils
 from .privacy_utils import dp_optimizer
 from dpgnn.utils import SparseRowIndexer
 import scipy.sparse as sp
-
+from scipy.spatial.distance import cdist
+from scipy.sparse import csr_matrix
+import networkx as nx
 
 class DPGNN:
     def __init__(self, d, nc, hidden_size, nlayers, lr,
@@ -123,58 +125,143 @@ class DPGNN:
         logits = np.row_stack(logits)
         return logits
     
-    def predict(self, sess, adj_matrix, attr_matrix, alpha,
-                    nprop=2, ppr_normalization='sym', batch_size_logits=10000):
+    def compute_Q(self,adj_matrix):
+        
+        if isinstance(adj_matrix, csr_matrix):
+            adj_matrix = adj_matrix.toarray()
+        G = nx.from_numpy_array(adj_matrix)
+        N = len(adj_matrix)
+        edges = G.number_of_edges()
+        
+        # Compute shortest path lengths
+        shortest_paths = dict(nx.all_pairs_shortest_path_length(G))
+        R = np.zeros((N, N))
+        for i in range(N):
+            for j in range(N):
+                if i != j:
+                    R[i, j] = shortest_paths[i].get(j, np.inf)  # Use np.inf if no path exists
+        
+        # Compute closeness centrality
+        CC = np.array([ (N-1) / np.sum(R[i]) if np.sum(R[i]) != 0 else 0 for i in range(N) ])
+        
+        # Compute network density
+        density_G = (2 * edges) / (N * (N - 1))
+        
+        # Compute degree density
+        degrees = np.array([G.degree(i) for i in range(N)])
+        Dd = np.zeros((N, N))
+        for i in range(N):
+            for j in range(N):
+                if R[i, j] > 0 and R[i, j] != np.inf:
+                    Dd[i, j] = degrees[j] / (np.pi * R[i, j]**2)
+        
+        # Compute exponent term e^(EC(vi) - EC(vj))
+        EC = np.array(list(nx.eigenvector_centrality_numpy(G).values()))
+        exp_EC_diff = np.exp(EC[:, None] - EC[None, :])
+        
+        # Compute final Q values
+        Q = np.zeros((N, N))
+        for i in range(N):
+            for j in range(N):
+                if i != j and R[i, j] > 0 and R[i, j] != np.inf:
+                    Q[i, j] = (degrees[i] * exp_EC_diff[i, j] * density_G * Dd[i, j]) / R[i, j]
+        
+        return Q
 
-            local_logits = self._get_logits(sess, attr_matrix, adj_matrix.shape[0], batch_size_logits)
-            logits = local_logits.copy()
-
-            if ppr_normalization == 'sym':
-                # Assume undirected (symmetric) adjacency matrix
-                deg = adj_matrix.sum(1).A1
-                deg_sqrt_inv = 1. / np.sqrt(np.maximum(deg, 1e-12))
-                for _ in range(nprop):  # power iteration
-                    logits = (1 - alpha) * deg_sqrt_inv[:, None] * (adj_matrix @ (deg_sqrt_inv[:, None] * logits)) + alpha * local_logits
-            elif ppr_normalization == 'col':
-                deg_col = adj_matrix.sum(0).A1
-                deg_col_inv = 1. / np.maximum(deg_col, 1e-12)
-                for _ in range(nprop):
-                    logits = (1 - alpha) * (adj_matrix @ (deg_col_inv[:, None] * logits)) + alpha * local_logits
-            elif ppr_normalization == 'row':
-                deg_row = adj_matrix.sum(1).A1
-                deg_row_inv_alpha = (1 - alpha) / np.maximum(deg_row, 1e-12)
-                for _ in range(nprop):
-                    logits = deg_row_inv_alpha[:, None] * (adj_matrix @ logits) + alpha * local_logits
-            elif ppr_normalization == 'cosine_similarity':
-       
-                attr_norms = np.linalg.norm(attr_matrix.toarray(), axis=1)
-                attr_norms[attr_norms == 0] = 1e-12  # Avoid division by zero
-
-                # Compute cosine similarity matrix
-                cosine_sim_matrix = attr_matrix @ attr_matrix.T
-                cosine_sim_matrix /= attr_norms[:, None]
-                cosine_sim_matrix /= attr_norms[None, :]
-
-                # Normalize adjacency matrix with cosine similarity
-                transition_matrix = adj_matrix.multiply(cosine_sim_matrix)
-                transition_matrix = sp.diags(1 / transition_matrix.sum(axis=1).A1) @ transition_matrix
-                # def safe_softmax(x, axis=1):
-                #             x_max = np.max(x, axis=axis, keepdims=True)
-                #             exp_x = np.exp(x - x_max)
-                #             return exp_x / np.sum(exp_x, axis=axis, keepdims=True)
-
-                # transition_matrix_np = transition_matrix.toarray()
-                # transition_matrix = safe_softmax(transition_matrix_np)
-                transition_matrix = -1 * transition_matrix
-                
-                for _ in range(nprop):
-                        logits = (1 - alpha) * (transition_matrix.T @ logits) + alpha * local_logits
-                            
+    def compute_gravitational_importance(self,adj_matrix, embeddings, G_const=1e-3):
+        """Compute gravitational force-based node importance using adjacency matrix."""
+        
+        print("ADJ!!!!!!",adj_matrix,type(adj_matrix))
+        if isinstance(adj_matrix, sp.csr_matrix):
+            degrees = np.array(adj_matrix.sum(axis=1)).flatten()
+        elif isinstance(adj_matrix, np.ndarray):
+            if adj_matrix.ndim == 2:
+                degrees = np.sum(adj_matrix, axis=1)
             else:
-                raise ValueError(f"Unknown PPR normalization: {ppr_normalization}")
-            predictions = logits.argmax(1)
-            return predictions
+                raise ValueError("adj_matrix must be a 2D array")
+        else:
+            raise TypeError("adj_matrix must be a NumPy array or scipy sparse matrix")
+        
+        # Compute pairwise Euclidean distances between node embeddings
+        dist_matrix = cdist(embeddings, embeddings, metric="euclidean")
 
+        # Avoid division by zero
+        dist_matrix[dist_matrix < 1e-6] = 1e-6  
+
+        # Compute gravitational force: F_ij = G * (m_i * m_j) / d_ij^2
+        gravity_matrix = G_const * np.outer(degrees, degrees) / (dist_matrix ** 2)
+
+        # Thresholding to remove small values
+        gravity_matrix[gravity_matrix < 1e-4] = 0
+
+        return sp.csr_matrix(gravity_matrix)  # Return sparse matrix for efficiency
+
+    
+    def predict(self, sess, adj_matrix, attr_matrix, alpha, features=[],
+            nprop=2, ppr_normalization='sym', gravity=False, batch_size_logits=10000,
+            feature_aware=False, embeddings=[],heat = False):
+    
+        local_logits = self._get_logits(sess, attr_matrix, adj_matrix.shape[0], batch_size_logits)
+        logits = local_logits.copy()
+
+        if heat:
+            Q_matrix = self.compute_Q(adj_matrix)
+            Q_matrix = csr_matrix(Q_matrix)
+            Q_matrix = Q_matrix.multiply(1 / Q_matrix.sum(axis=1).A1[:, None])  # Normalize
+            
+            for _ in range(nprop):
+                logits = (1 - alpha) * (Q_matrix @ logits) + alpha * local_logits
+
+        if gravity and len(embeddings) > 0:
+            gravity_matrix = self.compute_gravitational_importance(adj_matrix=adj_matrix,embeddings=embeddings)
+            gravity_matrix = gravity_matrix.multiply(1 / gravity_matrix.sum(axis=1).A1[:, None])  # Normalize
+            
+            for _ in range(nprop):
+                logits = (1 - alpha) * (gravity_matrix @ logits) + alpha * local_logits
+        
+        elif ppr_normalization == 'sym':
+            deg = adj_matrix.sum(1).A1
+            deg_sqrt_inv = 1. / np.sqrt(np.maximum(deg, 1e-12))
+            for _ in range(nprop):
+                if feature_aware:
+                    feature_norm = np.linalg.norm(features, axis=1, keepdims=True) + 1e-8
+                    feature_sim = (features @ features.T) / (feature_norm @ feature_norm.T)
+                    feature_sim = feature_sim / feature_sim.sum(axis=1, keepdims=True)
+                    logits = (1 - alpha) * deg_sqrt_inv[:, None] * (adj_matrix @ (deg_sqrt_inv[:, None] * logits)) \
+                            + alpha * (feature_sim @ local_logits)
+                else:
+                    logits = (1 - alpha) * deg_sqrt_inv[:, None] * (adj_matrix @ (deg_sqrt_inv[:, None] * logits)) \
+                            + alpha * local_logits
+        
+        elif ppr_normalization == 'col':
+            deg_col = adj_matrix.sum(0).A1
+            deg_col_inv = 1. / np.maximum(deg_col, 1e-12)
+            for _ in range(nprop):
+                logits = (1 - alpha) * (adj_matrix @ (deg_col_inv[:, None] * logits)) + alpha * local_logits
+        
+        elif ppr_normalization == 'row':
+            deg_row = adj_matrix.sum(1).A1
+            deg_row_inv_alpha = (1 - alpha) / np.maximum(deg_row, 1e-12)
+            for _ in range(nprop):
+                logits = deg_row_inv_alpha[:, None] * (adj_matrix @ logits) + alpha * local_logits
+        
+        elif ppr_normalization == 'cosine_similarity':
+            attr_norms = np.linalg.norm(attr_matrix.toarray(), axis=1)
+            attr_norms[attr_norms == 0] = 1e-12
+            cosine_sim_matrix = attr_matrix @ attr_matrix.T
+            cosine_sim_matrix /= attr_norms[:, None]
+            cosine_sim_matrix /= attr_norms[None, :]
+            transition_matrix = adj_matrix.multiply(cosine_sim_matrix)
+            transition_matrix = sp.diags(1 / transition_matrix.sum(axis=1).A1) @ transition_matrix
+            transition_matrix = -1 * transition_matrix
+            for _ in range(nprop):
+                logits = (1 - alpha) * (transition_matrix.T @ logits) + alpha * local_logits
+        
+        else:
+            raise ValueError(f"Unknown PPR normalization: {ppr_normalization}")
+        
+        predictions = logits.argmax(1)
+        return predictions
     def get_vars(self, sess):
         return sess.run(tf.trainable_variables())
 

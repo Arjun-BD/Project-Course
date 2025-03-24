@@ -4,16 +4,26 @@ import scipy.sparse as sp
 from . import utils
 
 
+import numba
+import numpy as np
+import scipy.sparse as sp
+from sklearn.metrics.pairwise import cosine_similarity
+from . import utils
+
+def compute_feature_similarity(features):
+    """Compute feature similarity using cosine similarity"""
+    return cosine_similarity(features)  # Returns NxN similarity matrix
+
 def construct_sparse(neighbors, weights, shape):
-    i = np.repeat(np.arange(len(neighbors)), np.fromiter(map(len, neighbors), dtype=np.int))
+    """Constructs a sparse matrix from neighbors and weights"""
+    i = np.repeat(np.arange(len(neighbors)), np.fromiter(map(len, neighbors), dtype=np.int64))
     j = np.concatenate(neighbors)
     return sp.coo_matrix((np.concatenate(weights), (i, j)), shape)
 
-
-# clip and add noise to the output of pr
 @numba.njit(cache=True)
 def calc_ppr_node_ista_p_dp(nnodes, alpha, epsilon, sigma, clip_bound, rho, out_degree, node_index, deg_inv, indices,
-                           indptr, dp_ppr):
+                            indptr, dp_ppr, feature_weights, Feature_Aware):
+    """Compute feature-aware PPR using ISTA algorithm if Feature_Aware flag is enabled"""
     s_vector = np.zeros(nnodes)
     s_vector[node_index] = 1
 
@@ -62,7 +72,8 @@ def calc_ppr_node_ista_p_dp(nnodes, alpha, epsilon, sigma, clip_bound, rho, out_
 
         delta_fp_old = delta_fp_new
         p_vector_old = p_vector_new
-
+    if Feature_Aware:
+        p_vector_old *= feature_weights[node_index]  
     if dp_ppr:
         gaussian_noise = np.random.normal(loc=0.0, scale=sigma, size=delta_fp_shape)
         p_vector_old_norm = np.linalg.norm(p_vector_old)
@@ -74,12 +85,17 @@ def calc_ppr_node_ista_p_dp(nnodes, alpha, epsilon, sigma, clip_bound, rho, out_
     else:
         p_vector_old_tilde = p_vector_old
 
+    # **Feature-aware reweighting only if Feature_Aware is True**
+    i
+
     return p_vector_old_tilde
 
 
 def ppr_topk_ista_helper(nnodes, nodes, alpha, epsilon, sigma, clip_bound_ista, rho, out_degree, deg_inv, indices,
                          indptr, dp_ppr, topk, em_sensitivity, report_noise_val_eps,
-                         EM, EM_eps):
+                         EM, EM_eps, feature_weights, Feature_Aware):
+    """Compute feature-aware ISTA-based PPR for multiple nodes"""
+
     js = [np.zeros(0, dtype=np.int64)] * nnodes
     vals = [np.zeros(0, dtype=np.float64)] * nnodes
 
@@ -87,7 +103,7 @@ def ppr_topk_ista_helper(nnodes, nodes, alpha, epsilon, sigma, clip_bound_ista, 
     for i in numba.prange(len(nodes)):
         node_index = nodes[i]
         p_vector = calc_ppr_node_ista_p_dp(nnodes, alpha, epsilon, sigma, clip_bound_ista, rho, out_degree,
-                                           node_index, deg_inv, indices, indptr, dp_ppr)
+                                           node_index, deg_inv, indices, indptr, dp_ppr, feature_weights, Feature_Aware)
 
         if EM:
             j_dp, val_dp = utils.EM_Gumbel_Optimal(EM_eps, topk, em_sensitivity, report_noise_val_eps, p_vector)
@@ -105,8 +121,8 @@ def ppr_topk_ista_helper(nnodes, nodes, alpha, epsilon, sigma, clip_bound_ista, 
 
 
 def ppr_topk_ista(adj_matrix, alpha, epsilon, rho, nodes, topk, dp_ppr, sigma, clip_bound_ista, em_sensitivity,
-                  report_noise_val_eps, EM, EM_eps):
-    """Calculate the PPR matrix approximately using ISTA """
+                  report_noise_val_eps, EM, EM_eps, features, Feature_Aware):
+    """Calculate the feature-aware PPR matrix approximately using ISTA """
 
     out_degree = np.sum(adj_matrix > 0, axis=1).A1
     nnodes = adj_matrix.shape[0]
@@ -114,21 +130,31 @@ def ppr_topk_ista(adj_matrix, alpha, epsilon, rho, nodes, topk, dp_ppr, sigma, c
     deg = adj_matrix.sum(1).A1
     deg_inv = 1. / np.maximum(deg, 1e-12)
 
+    if Feature_Aware:
+        # Compute feature similarity and normalize
+        feature_weights = compute_feature_similarity(features)
+        feature_weights = (feature_weights - feature_weights.min()) / (feature_weights.max() - feature_weights.min() + 1e-8)
+    else:
+        feature_weights = np.ones((nnodes, nnodes)) 
+
     js, vals = ppr_topk_ista_helper(nnodes, nodes, alpha, epsilon, sigma, clip_bound_ista, rho, out_degree, deg_inv,
                                     adj_matrix.indices, adj_matrix.indptr, dp_ppr, topk, em_sensitivity,
-                                    report_noise_val_eps, EM, EM_eps)
+                                    report_noise_val_eps, EM, EM_eps, feature_weights, Feature_Aware)
 
     return construct_sparse(js, vals, (len(nodes), nnodes))
 
 
 def topk_ppr_matrix_ista(adj_matrix, alpha, eps, rho, idx, topk, sigma, clip_bound_ista, dp_ppr,
-                         em_sensitivity, report_noise_val_eps, EM, EM_eps):
-    """Create a sparse matrix where each node has up to the topk PPR neighbors and their weights."""
+                         em_sensitivity, report_noise_val_eps, EM, EM_eps, features, Feature_Aware):
+    """Create a sparse matrix where each node has up to the topk PPR neighbors and their weights,
+       adjusted for feature similarity if Feature_Aware is True.
+    """
 
     topk_matrix = ppr_topk_ista(adj_matrix, alpha, eps, rho, idx, topk, dp_ppr, sigma, clip_bound_ista,
-                                em_sensitivity, report_noise_val_eps, EM, EM_eps).tocsr()
+                                em_sensitivity, report_noise_val_eps, EM, EM_eps, features, Feature_Aware).tocsr()
 
     return topk_matrix
+
 
 def random_walk_with_cosine_similarity(adj_matrix, adj_attr_matrix, alpha, num_steps, nodes, topk):
         """Perform a random walk with restart where transition probabilities are based on cosine similarity."""
