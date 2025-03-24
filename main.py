@@ -78,6 +78,7 @@ flags.DEFINE_bool('label_dp', False, 'Use label DP or not')
 flags.DEFINE_bool('drop_random_edges', False, 'Drop random edges in training graph')
 flags.DEFINE_float('pct_drop_random_edges', 0.05, 'Percentage of random edges to be dropped during training')
 flags.DEFINE_bool('importextadj', False, "import ext training adj matrix instead of using utils one")
+flags.DEFINE_string('extadjfile', None, 'external sampled adj matrix file')
 FLAGS = flags.FLAGS
 
 
@@ -102,7 +103,7 @@ def main(unused_argv):
          train_labels=train_labels)
 
     if(FLAGS.importextadj):
-        smth = np.load("C:/Users/skabh/Downloads/commonneighbour_sampled9pctcoraml.npz")
+        smth = np.load(FLAGS.extadjfile)
         train_adj_matrix = sp.csr_matrix(smth['train_adj_matrix'])
         train_attr_matrix = sp.csr_matrix(train_attr_matrix[smth['train_labels']])
         train_labels = train_labels[smth['train_labels']]
