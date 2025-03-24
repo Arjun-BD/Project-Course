@@ -77,7 +77,7 @@ flags.DEFINE_integer('epsilon_label_dp', 3, 'Epsilon for Label DP')
 flags.DEFINE_bool('label_dp', False, 'Use label DP or not')
 flags.DEFINE_bool('drop_random_edges', False, 'Drop random edges in training graph')
 flags.DEFINE_float('pct_drop_random_edges', 0.05, 'Percentage of random edges to be dropped during training')
-
+flags.DEFINE_bool('importextadj', False, "import ext training adj matrix instead of using utils one")
 FLAGS = flags.FLAGS
 
 
@@ -96,11 +96,17 @@ def main(unused_argv):
     print(train_labels.shape)
     temp = FLAGS.data_file.split('/')[1]
 
-    # np.savez(f"train_adj&train_attr{temp}.npz",
-    #      train_adj_matrix=train_adj_matrix.toarray(),
-    #      train_attr_matrix=train_attr_matrix.toarray(),
-    #      train_labels=train_labels)
+    np.savez(f"train_adj&train_attr{temp}.npz",
+         train_adj_matrix=train_adj_matrix.toarray(),
+         train_attr_matrix=train_attr_matrix.toarray(),
+         train_labels=train_labels)
 
+    if(FLAGS.importextadj):
+        smth = np.load("C:/Users/skabh/Downloads/commonneighbour_sampled9pctcoraml.npz")
+        train_adj_matrix = sp.csr_matrix(smth['train_adj_matrix'])
+        train_attr_matrix = sp.csr_matrix(train_attr_matrix[smth['train_labels']])
+        train_labels = train_labels[smth['train_labels']]
+        train_index = np.arange(len(train_labels))
 
     d = num_attr
     nc = num_class
@@ -266,7 +272,7 @@ def main(unused_argv):
         print(param_dict)
         #save model
 
-        np.savez(f'saved_models/model_{temp}_dpsgd_{FLAGS.dp_ppr}_sampling{FLAGS.privacy_amplify_sampling_rate * 100}_eps{epsilon}pct,drop_randomedges{FLAGS.drop_random_edges}{FLAGS.pct_drop_random_edges}.npz', **param_dict)
+        # np.savez(f'saved_models_pubmed/model_{temp}_dpsgd_{FLAGS.dp_ppr}_sampling{FLAGS.privacy_amplify_sampling_rate * 100}_eps{epsilon}pct,drop_randomedges{FLAGS.drop_random_edges}{FLAGS.pct_drop_random_edges}.npz', **param_dict)
         predictions = model.predict(
             sess=sess, adj_matrix=test_adj_matrix, attr_matrix=test_attr_matrix, alpha=FLAGS.alpha,
             nprop=FLAGS.nprop_inference, ppr_normalization=FLAGS.ppr_normalization)
