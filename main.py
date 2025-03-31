@@ -283,6 +283,7 @@ def main(unused_argv):
             topk_train = ppr.topk_ppr_matrix_ista(train_adj_matrix, FLAGS.alpha, FLAGS.eps, FLAGS.rho, train_index[:ppr_num],
                                                 FLAGS.topk, FLAGS.sigma_ista, FLAGS.clip_bound_ista, FLAGS.dp_ppr,
                                                 FLAGS.em_sensitivity, FLAGS.report_val_eps, FLAGS.EM, FLAGS.EM_eps,features = train_attr_matrix,Feature_Aware=FLAGS.feature_aware)
+            print("--------------------------------------------------------------------------------------------------------------")
         elif(not FLAGS.gravity):
             topk_train = compute_Q(train_adj_matrix)
             

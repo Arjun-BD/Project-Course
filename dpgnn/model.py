@@ -203,7 +203,7 @@ class DPGNN:
     
         local_logits = self._get_logits(sess, attr_matrix, adj_matrix.shape[0], batch_size_logits)
         logits = local_logits.copy()
-
+        print("--------------------------------gtp2",heat,gravity,ppr_normalization)
         if heat:
             Q_matrix = self.compute_Q(adj_matrix)
             Q_matrix = csr_matrix(Q_matrix)
@@ -212,7 +212,7 @@ class DPGNN:
             for _ in range(nprop):
                 logits = (1 - alpha) * (Q_matrix @ logits) + alpha * local_logits
 
-        if gravity and len(embeddings) > 0:
+        elif gravity and len(embeddings) > 0:
             gravity_matrix = self.compute_gravitational_importance(adj_matrix=adj_matrix,embeddings=embeddings)
             gravity_matrix = gravity_matrix.multiply(1 / gravity_matrix.sum(axis=1).A1[:, None])  # Normalize
             
@@ -220,6 +220,7 @@ class DPGNN:
                 logits = (1 - alpha) * (gravity_matrix @ logits) + alpha * local_logits
         
         elif ppr_normalization == 'sym':
+            print('Gotcha-------========================================================================================')
             deg = adj_matrix.sum(1).A1
             deg_sqrt_inv = 1. / np.sqrt(np.maximum(deg, 1e-12))
             for _ in range(nprop):
