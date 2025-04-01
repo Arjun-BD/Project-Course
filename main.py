@@ -194,8 +194,8 @@ def main(unused_argv):
     if(FLAGS.importextadj):
         smth = np.load(FLAGS.extadjfile)
         train_adj_matrix = sp.csr_matrix(smth['train_adj_matrix'])
-        train_attr_matrix = sp.csr_matrix(np.load('matricx.npz')['train_attr_matrix'][smth['train_labels']])
-        train_labels = (np.load('matricx.npz')['train_labels'])[smth['train_labels']]
+        train_attr_matrix = sp.csr_matrix(np.load('train_adj&train_attrcora_ml.npz')['train_attr_matrix'][smth['train_labels']])
+        train_labels = (np.load('train_adj&train_attrcora_ml.npz')['train_labels'])[smth['train_labels']]
         train_index = np.arange(len(train_labels))
 
     
