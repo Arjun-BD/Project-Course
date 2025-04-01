@@ -88,7 +88,7 @@ def get_data(dataset_path, privacy_amplify_sampling_rate):
     print(train_total_idx)
 
     # use subsamples from all train nodes for actual training (privacy amplification)
-    train_total_idx = np.random.permutation(train_total_idx)
+    train_total_idx = np.random.RandomState(seed=42).permutation(train_total_idx)
     train_idx = train_total_idx[:int(np.ceil(privacy_amplify_sampling_rate*len(train_total_idx)))]
 
     # generate train subgraph
