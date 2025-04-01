@@ -82,6 +82,9 @@ flags.DEFINE_bool('label_dp', False, 'Use label DP or not')
 flags.DEFINE_bool('feature_aware',False,'Activates feature aware PPR')
 flags.DEFINE_bool('gravity',False,'Determines whether to use a gravity based clustering instead of PPR')
 flags.DEFINE_bool('heat',False,'Determines whether to use a heat transfer    based clustering instead of PPR')
+flags.DEFINE_bool('importextadj', False, "import ext training adj matrix instead of using utils one")
+flags.DEFINE_string('extadjfile', None, 'external sampled adj matrix file')
+
 
 FLAGS = flags.FLAGS
 
@@ -187,8 +190,15 @@ def main(unused_argv):
          train_adj_matrix=train_adj_matrix.toarray(), 
          train_attr_matrix=train_attr_matrix.toarray(), 
          train_labels=train_labels)
+    
+    if(FLAGS.importextadj):
+        smth = np.load(FLAGS.extadjfile)
+        train_adj_matrix = sp.csr_matrix(smth['train_adj_matrix'])
+        train_attr_matrix = sp.csr_matrix(np.load('matricx.npz')['train_attr_matrix'][smth['train_labels']])
+        train_labels = (np.load('matricx.npz')['train_labels'])[smth['train_labels']]
+        train_index = np.arange(len(train_labels))
 
-
+    
     d = num_attr
     nc = num_class
 
