@@ -14,7 +14,7 @@ from dpgnn.model import DPGNN, train as train_solo
 from dpgnn.model_enc import DPGNN as DPGNN_enc, train as train_w_enc, train_encoder
 from tqdm import tqdm
 from pynverse import inversefunc
-
+import random
 
 # Set up logging
 logger = logging.getLogger()
@@ -103,11 +103,41 @@ def main(unused_argv):
          train_labels=train_labels)
 
     if(FLAGS.importextadj):
-        smth = np.load(FLAGS.extadjfile)
-        train_adj_matrix = sp.csr_matrix(smth['train_adj_matrix'])
-        train_attr_matrix = sp.csr_matrix(np.load('matricx.npz')['train_attr_matrix'][smth['train_labels']])
-        train_labels = (np.load('matricx.npz')['train_labels'])[smth['train_labels']]
-        train_index = np.arange(len(train_labels))
+        if(FLAGS.extadjfile != "NA"):
+            smth = np.load(FLAGS.extadjfile)
+            train_adj_matrix = sp.csr_matrix(np.load('matricx.npz')['train_adj_matrix'][:, smth['train_labels']][smth['train_labels'], :])
+            train_attr_matrix = sp.csr_matrix(np.load('matricx.npz')['train_attr_matrix'][smth['train_labels']])
+            train_labels = (np.load('matricx.npz')['train_labels'])[smth['train_labels']]
+            train_index = np.arange(len(train_labels))
+
+        else:
+            data = np.load('matricx.npz')
+            train_adj_matrix = sp.csr_matrix(data['train_adj_matrix'])
+            train_attr_matrix = sp.csr_matrix(data['train_attr_matrix'])
+            train_labels = data['train_labels']
+            total_samples = 231
+            indices_by_value = {i: [] for i in range(7)}
+
+            for i, num in enumerate(train_labels):
+                if num in indices_by_value:
+                    indices_by_value[num].append(i)
+
+            samples_per_value = total_samples // 7
+
+            selected_indices = []
+            random.seed(0)
+            for value, indices in indices_by_value.items():
+                if len(indices) >= samples_per_value:
+                    selected_indices += random.sample(indices, samples_per_value)
+
+            train_labels = train_labels[selected_indices]
+            train_attr_matrix = train_attr_matrix[selected_indices]
+            train_adj_matrix = train_adj_matrix[:, selected_indices][selected_indices, :]
+            train_index = np.arange(len(train_labels))
+
+        a, b = np.unique(train_labels, return_counts=True)
+        print("labels", a)
+        print("freq", b)
 
     d = num_attr
     nc = num_class
