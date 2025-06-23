@@ -1,49 +1,11 @@
-# Implementation of [DPAR: Decoupled Graph Neural Networks with Node-Level Differential Privacy](https://www2024.thewebconf.org/accepted/research-tracks/)
+# Experimentation on [DPAR: Decoupled Graph Neural Networks with Node-Level Differential Privacy](https://www2024.thewebconf.org/accepted/research-tracks/)
 
- Accepted at 2024 ACM International World Wide Web Conference (WWW 24)
+The different branches contain the different experiments conducted:
 
-## Install metis on mac:  
+- `Abhinav` contains experiments using the feature aware random walk and the graph sampling experiments.
+- `Arjun` contains experiments using the clustering method.
+- `SALSA` and `SALSA_revamp` contain other experiments replacing the Personalised Pagreank Algorithm with Gravity Equation and Heat based paradigms.
 
-1. Download metis-5.1.0.tar.gz from http://glaros.dtc.umn.edu/gkhome/metis/metis/download and unpack it
-2. cd metis-5.1.0
-3. make config shared=1
-4. make install
-5. export METIS_DLL=/usr/local/lib/libmetis.dylib
+  The base code for this repository is taken from the official implementation of DPAR by the paper authors.
 
-
-## Package version:
-tensorflow==1.15.4  
-networkx==2.5  
-metis==0.2a4  
-pynverse==0.1.4.4  
-scikit-learn==0.23.2  
-scipy==1.5.2  
-numba==0.51.2  
-numpy==1.18.5  
-
-
-## Run main.py  
-bash script example
-```bash
-#!/bin/bash
-
-alpha_list=(0.99)
-topk_list=(4 8 16 32 64 128 256 512 1024)
-
-for alpha_value in "${alpha_list[@]}"
-do
-	for topk_value in "${topk_list[@]}"
-	do
- 		python run_demo_test_noPowerInteration.py --lr 5e-4 --topk $topk_value --ntrain_div_classes 3754 --alpha $alpha_value
-	done
-done
-```
-
-## Dataset options
-
-1. Cora: ```data/cora_ml```
-2. Pubmed: ```data/pubmed```
-3. Ms academic: ```data/ms_academic```
-4. Facebook: ```data/facebook```
-5. pubmed: ```data/pubmed```
-6. Physics: ```data/physics```
+  Note that before running the scripts, the `METIS_DLL` environment variable has to be set to the appropriate file (The `metis.dll` file is provided in the `Metis` directory) 
