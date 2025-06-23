@@ -8,4 +8,4 @@ The different branches contain the different experiments conducted:
 
   The base code for this repository is taken from the official implementation of DPAR by the paper authors.
 
-  Note that before running the scripts, the `METIS_DLL` environment variable has to be set to the appropriate file (The `metis.dll` file is provided in the `Metis` directory) 
+  Note that before running the scripts, the `METIS_DLL` environment variable has to be set to the appropriate file (For windows directly use `metis.dll` provided in the `Metis` directory, for linux(Ubuntu) `sudo apt install libmetis-dev` and then set the METIS_DLL environment variable to `libmetis.so`) 
